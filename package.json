@@ -1,0 +1,16 @@
+{
+  "name": "raidvault",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "apps/*"
+    ]
+  },
+  "scripts": {
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --ignore-pattern 'node_modules' --ignore-pattern '.next'",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run",
+    "build": "turbo build --scope=web"
+  }
+}
