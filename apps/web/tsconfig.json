@@ -12,7 +12,7 @@
     "moduleResolution": "bundler",
     "rootDir": "./src",
     "baseUrl": "./src",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -37,7 +37,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

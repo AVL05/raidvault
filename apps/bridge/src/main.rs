@@ -1,10 +1,11 @@
 /// Minimal RaidVault Bridge - M0 Foundation
 ///
-/// This binary provides only basic process existence detection capabilities
-/// that a browser/PWA cannot safely provide. It is not a game-modification
-/// component and does not integrate with ARC Raiders.
+/// This binary is a minimal executable providing no game integration,
+/// no process detection, no networking, and no localhost API.
+/// It is intended only as a foundation artifact for the M0 milestone.
 ///
-/// Initial scope: minimal executable that builds and tests successfully.
+/// No process detection, networking, or localhost endpoints are
+/// implemented or intended for this milestone.
 #[cfg(not(debug_assertions))]
 fn main() {
     eprintln!("RaidVault Bridge (production mode)");
@@ -15,6 +16,6 @@ fn main() {
 fn main() {
     println!("RaidVault Bridge v0.1.0");
     println!("Edition: 2024");
-    println!("Safe Rust only - no game integration");
     println!("Minimal foundation binary - M0 phase");
+    println!("No game integration, no process detection");
 }
