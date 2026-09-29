@@ -23,7 +23,8 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "strict": true
+    "strict": true,
+    "jsx": "react-jsx"
   },
   "include": ["packages/**/*.ts", "packages/**/*.tsx", "apps/**/*.ts", "apps/**/*.tsx"],
   "exclude": ["node_modules", ".next"]

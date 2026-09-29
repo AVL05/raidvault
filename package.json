@@ -7,10 +7,17 @@
       "apps/*"
     ]
   },
+  "dependencies": {
+    "typescript": "^5.6.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.15.0",
+    "vitest": "^2.1.8"
+  },
   "scripts": {
-    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --ignore-pattern 'node_modules' --ignore-pattern '.next'",
+    "lint": "pnpm exec --dir apps/web eslint . --ext .ts,.tsx,.js,.jsx --ignore-pattern 'node_modules' --ignore-pattern '.next'",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "vitest run",
-    "build": "turbo build --scope=web"
+    "test": "pnpm exec vitest run",
+    "build": "pnpm -C apps/web build"
   }
 }
