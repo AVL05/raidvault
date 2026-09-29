@@ -1,0 +1,40 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Rust
+target/
+**/target/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local application/model data
+.raidvault/
+models/
+cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
