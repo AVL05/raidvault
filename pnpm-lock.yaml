@@ -83,7 +83,11 @@ importers:
 
   packages/game-data: {}
 
-  packages/providers: {}
+  packages/providers:
+    dependencies:
+      '@raidvault/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/rules-engine: {}
 
