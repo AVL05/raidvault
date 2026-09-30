@@ -1,21 +1,22 @@
-/// Minimal RaidVault Bridge - M0 Foundation
+/// RaidVault Bridge — minimal localhost companion (M7).
 ///
-/// This binary is a minimal executable providing no game integration,
-/// no process detection, no networking, and no localhost API.
-/// It is intended only as a foundation artifact for the M0 milestone.
-///
-/// No process detection, networking, or localhost endpoints are
-/// implemented or intended for this milestone.
-#[cfg(not(debug_assertions))]
-fn main() {
-    eprintln!("RaidVault Bridge (production mode)");
-}
+/// Serves three loopback-only GET endpoints (`/health`, `/version`,
+/// `/gaming-mode`) backed by narrow process-existence detection and
+/// fail-safe Gaming Mode mapping. No game integration, no process
+/// memory access, no anti-cheat interaction, no traffic interception,
+/// no automation, and no elevated privileges. Ordinary user permissions
+/// suffice. See `docs/BRIDGE.md` for the enforced boundaries.
+use raidvault_bridge::process_detection::ProductionArcProcessDetector;
+use raidvault_bridge::server::{self, App};
 
-/// Debug entry point
-#[cfg(debug_assertions)]
+/// Compose the Bridge and serve on loopback. Startup failures (such as
+/// an occupied port) are reported on stderr with a nonzero exit.
+/// Request handling itself never panics on expected runtime errors.
 fn main() {
-    println!("RaidVault Bridge v0.1.0");
-    println!("Edition: 2024");
-    println!("Minimal foundation binary - M0 phase");
-    println!("No game integration, no process detection");
+    let application = App::new(ProductionArcProcessDetector);
+    let address = server::loopback_address();
+    if let Err(error) = server::run(application, address) {
+        eprintln!("raidvault-bridge: failed to serve {address}: {error}");
+        std::process::exit(1);
+    }
 }

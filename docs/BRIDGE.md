@@ -96,3 +96,14 @@ Every new Bridge capability requires:
 4. tests;
 5. documentation update;
 6. explicit approval before implementation.
+
+## M7 implementation status
+
+Implemented: `GET /health`, `GET /version`, and `GET /gaming-mode` on
+`127.0.0.1` using only the Rust standard library (no HTTP framework).
+
+No approved ARC Raiders executable identity exists in project
+documentation yet, so the production detector reports UNKNOWN
+(fail-safe) and no executable names are hard-coded. Fake detectors
+cover every detection state in tests. No CORS is configured because no
+browser integration consumes the Bridge yet.
