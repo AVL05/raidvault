@@ -5,55 +5,95 @@
  * Used by domain tests to verify invariant behavior reliably.
  */
 
+import type {
+  PlayerProfile,
+  PlayerStash,
+  HideoutProgress,
+  ProjectProgress,
+  QuestProgress,
+  PlayerLoadout,
+  SnapshotMetadata,
+  StashCapacity,
+  StashItem,
+} from './index'
+
 export const FIXTURE_TIMESTAMP = 1700000000000
 
 // ---------------------------------------------------------------------------
-// Valid fixtures
+// Valid fixtures (shaped as createPlayerState / createPlayerStash inputs)
 // ---------------------------------------------------------------------------
 
 /** A valid minimal player state fixture. */
 export const validPlayerState: {
-  playerId: string
-  profile: { playerId: string }
-  snapshotMetadata: { capturedAt: number; source?: string }
+  profile: PlayerProfile
+  stash: undefined
+  hideoutProgress: undefined
+  projects: readonly ProjectProgress[]
+  questProgress: readonly QuestProgress[]
+  loadout: undefined
+  snapshotMetadata: SnapshotMetadata
 } = {
-  playerId: 'player-1',
   profile: { playerId: 'player-1' },
-  snapshotMetadata: { capturedAt: FIXTURE_TIMESTAMP },
-}
-
-/** A valid empty player state fixture (no stash, no progression). */
-export const validEmptyPlayerState: {
-  playerId: string
-  profile: { playerId: string }
-  stash?: undefined
-  hideoutProgress?: undefined
-  projects?: {}
-  questProgress?: {}
-  loadout?: undefined
-  snapshotMetadata: { capturedAt: number; source?: string }
-} = {
-  playerId: 'player-2',
-  profile: { playerId: 'player-2' },
-  snapshotMetadata: { capturedAt: FIXTURE_TIMESTAMP },
   stash: undefined,
   hideoutProgress: undefined,
   projects: [],
   questProgress: [],
   loadout: undefined,
+  snapshotMetadata: { capturedAt: FIXTURE_TIMESTAMP },
+}
+
+/** A valid empty player state fixture (no stash, no progression). */
+export const validEmptyPlayerState: {
+  profile: PlayerProfile
+  stash: undefined
+  hideoutProgress: undefined
+  projects: readonly ProjectProgress[]
+  questProgress: readonly QuestProgress[]
+  loadout: undefined
+  snapshotMetadata: SnapshotMetadata
+} = {
+  profile: { playerId: 'player-2' },
+  stash: undefined,
+  hideoutProgress: undefined,
+  projects: [],
+  questProgress: [],
+  loadout: undefined,
+  snapshotMetadata: { capturedAt: FIXTURE_TIMESTAMP },
 }
 
 /** A valid stash fixture with capacity. */
 export const validStashFixture: {
   id: string
-  items: readonly { id: string; quantity: number }[]
-  capacity: { totalSlots: number; usedSlots: number }
+  items: readonly StashItem[]
+  capacity: StashCapacity
   capturedAt: number
 } = {
   id: 'stash-1',
   items: [{ id: 'item-1', quantity: 3 }],
   capacity: { totalSlots: 10, usedSlots: 3 },
   capturedAt: FIXTURE_TIMESTAMP,
+}
+
+/** A valid stash value fixture (resolved PlayerStash shape). */
+export const validStashValue: PlayerStash = {
+  id: 'stash-1',
+  items: [{ id: 'item-1', quantity: 3 }],
+  capacity: { totalSlots: 10, usedSlots: 3 },
+  freshness: { capturedAt: FIXTURE_TIMESTAMP },
+}
+
+/** A valid hideout progress fixture. */
+export const validHideoutValue: HideoutProgress = {
+  hideoutId: 'h-1',
+  state: 'active',
+  resources: [100, 50],
+}
+
+/** A valid loadout fixture. */
+export const validLoadoutValue: PlayerLoadout = {
+  weaponId: 'w-1',
+  armorId: 'a-1',
+  accessoryId: 'acc-1',
 }
 
 // ---------------------------------------------------------------------------

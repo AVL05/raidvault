@@ -2,19 +2,18 @@
  * RaidVault — Provider-independent Domain Model (M1)
  *
  * This module owns provider-agnostic types and invariants.
- * It must NOT import from packages/providers, Next.js, React, or any
- * game-facing code. All types are plain TypeScript with no framework
- * dependencies.
+ * It must NOT import from packages/providers, Next.js, React, or game-facing
+ * code. All types are plain TypeScript with no framework dependencies.
  *
- * Invariants are enforced by constructor functions; invalid inputs
- * produce explicit, testable errors rather than silently accepted data.
+ * Invariants are enforced by constructor functions; invalid inputs produce
+ * explicit, testable errors rather than silently accepted data.
  */
 
 // ---------------------------------------------------------------------------
-// Snapshot metadata (provider-independent, reusable across stash/profile/state)
+// Snapshot metadata (provider-independent, reusable across stash and state)
 // ---------------------------------------------------------------------------
 
-/** Minimal snapshot metadata, shared by stash, profile, and state snapshots. */
+/** Minimal snapshot metadata, shared by stash and state snapshots. */
 export interface SnapshotMetadata {
   /** When the snapshot was captured (unix ms epoch). */
   readonly capturedAt: number
@@ -22,10 +21,21 @@ export interface SnapshotMetadata {
   readonly source?: string
 }
 
-/** Validation result using a generic DomainResult. */
+/** Discriminated validation result shared by all domain constructors. */
 export type DomainResult<T> =
   | { readonly success: true; readonly value: T }
   | { readonly success: false; readonly error: string }
+
+/** Snapshot metadata must carry an integer non-negative capture timestamp. */
+function validateSnapshotMetadata(metadata: SnapshotMetadata): string | undefined {
+  if (!metadata) {
+    return 'snapshot metadata is required'
+  }
+  if (!Number.isInteger(metadata.capturedAt) || metadata.capturedAt < 0) {
+    return `invalid snapshotMetadata.capturedAt: ${metadata.capturedAt}`
+  }
+  return undefined
+}
 
 // ---------------------------------------------------------------------------
 // Core identifiers
@@ -46,40 +56,29 @@ export interface StashItem {
   readonly quantity: number
 }
 
-/** Freshness metadata for a stash item, using provider-independent SnapshotMetadata. */
-export interface StashItemFreshness {
-  /** When the item was last fetched/validated. */
-  readonly capturedAt: number
-  /** Optional source identifier. */
-  readonly source?: string
-}
-
 // ---------------------------------------------------------------------------
 // Stash capacity
 // ---------------------------------------------------------------------------
 
-/** Slot capacity information for a stash, validated by PlayerStash. */
+/** Slot capacity information for a stash. Both counts are always known. */
 export interface StashCapacity {
   /** Total number of slots in the stash. */
-  readonly totalSlots?: number
+  readonly totalSlots: number
   /** Number of slots currently used. */
-  readonly usedSlots?: number
+  readonly usedSlots: number
 }
 
 /** Validate StashCapacity invariants. */
-function validateStashCapacity(
-  capacity: StashCapacity | undefined
-): string | undefined {
-  if (capacity === undefined) return undefined
-  const { totalSlots, usedSlots } = capacity
-  if (totalSlots === undefined || usedSlots === undefined) {
-    return 'totalSlots and usedSlots must be present when capacity is provided'
+function validateStashCapacity(capacity: StashCapacity): string | undefined {
+  if (!capacity) {
+    return 'stash capacity is required'
   }
+  const { totalSlots, usedSlots } = capacity
   if (!Number.isInteger(totalSlots) || totalSlots < 0) {
-    return 'totalSlots must be a non-negative integer when present'
+    return 'totalSlots must be a non-negative integer'
   }
   if (!Number.isInteger(usedSlots) || usedSlots < 0) {
-    return 'usedSlots must be a non-negative integer when present'
+    return 'usedSlots must be a non-negative integer'
   }
   if (usedSlots > totalSlots) {
     return 'usedSlots must not exceed totalSlots'
@@ -88,9 +87,7 @@ function validateStashCapacity(
 }
 
 /** Validation result for StashItem construction. */
-export type StashItemResult =
-  | { readonly success: true; readonly value: StashItem }
-  | { readonly success: false; readonly error: string }
+export type StashItemResult = DomainResult<StashItem>
 
 /** Create a StashItem, validating invariants. */
 export function createStashItem(
@@ -116,20 +113,18 @@ export interface PlayerStash {
   readonly id: string
   /** Items in the stash; expected to have unique IDs. */
   readonly items: readonly StashItem[]
-  /** Slot capacity information; optional when unknown. */
+  /** Slot capacity information for the stash. */
   readonly capacity: StashCapacity
   /** Freshness metadata for the whole stash. */
   readonly freshness: SnapshotMetadata
 }
 
 /** Validation result for PlayerStash construction. */
-export type PlayerStashResult =
-  | { readonly success: true; readonly value: PlayerStash }
-  | { readonly success: false; readonly error: string }
+export type PlayerStashResult = DomainResult<PlayerStash>
 
 /**
  * Create a PlayerStash, validating invariants.
- * - Rejects negative fetchedAt
+ * - Rejects invalid capturedAt
  * - Rejects duplicate stash item IDs
  * - Validates each item via createStashItem
  * - Validates slot capacity invariants
@@ -177,21 +172,18 @@ export function createPlayerStash(
 // PlayerProfile — identity/profile-only information
 // ---------------------------------------------------------------------------
 
-/** Profile-only information: player identifier. */
-/** Validation result for PlayerProfile construction. */
-export type PlayerProfileResult =
-  | { readonly success: true; readonly value: PlayerProfile }
-  | { readonly success: false; readonly error: string }
-
 /**
  * PlayerProfile contains identity/profile-only data.
- * It must NOT contain gameplay state (stash, hideout, projects, quests, loadout).
- * Those belong exclusively in PlayerState.
+ * It must NOT contain gameplay state (stash, hideout, projects, quests,
+ * loadout). Those belong exclusively in PlayerState.
  */
 export interface PlayerProfile {
   /** Unique player identifier. */
   readonly playerId: string
 }
+
+/** Validation result for PlayerProfile construction. */
+export type PlayerProfileResult = DomainResult<PlayerProfile>
 
 /**
  * Create a PlayerProfile, validating invariants.
@@ -219,14 +211,12 @@ export interface QuestProgress {
 }
 
 /** Validation result for QuestProgress construction. */
-export type QuestProgressResult =
-  | { readonly success: true; readonly value: QuestProgress }
-  | { readonly success: false; readonly error: string }
+export type QuestProgressResult = DomainResult<QuestProgress>
 
 /**
  * Create a QuestProgress, validating invariants.
  * - Quantities must be non-negative integers.
- * - Empty quantities array is allowed (M1 preference for consistent empty progress).
+ * - An empty quantities array is allowed.
  */
 export function createQuestProgress(
   questId: string,
@@ -239,9 +229,9 @@ export function createQuestProgress(
   if (state.trim() === '') {
     return { success: false, error: `invalid quest state: ${state}` }
   }
-  for (let i = 0; i < quantities.length; i++) {
-    if (!Number.isInteger(quantities[i] as number) || (quantities[i] as number) < 0) {
-      return { success: false, error: `quantities[${i}] must be a non-negative integer` }
+  for (const [index, quantity] of quantities.entries()) {
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return { success: false, error: `quantities[${index}] must be a non-negative integer` }
     }
   }
   return { success: true, value: { questId, state, quantities } }
@@ -259,14 +249,12 @@ export interface ProjectProgress {
 }
 
 /** Validation result for ProjectProgress construction. */
-export type ProjectProgressResult =
-  | { readonly success: true; readonly value: ProjectProgress }
-  | { readonly success: false; readonly error: string }
+export type ProjectProgressResult = DomainResult<ProjectProgress>
 
 /**
  * Create a ProjectProgress, validating invariants.
  * - Quantities must be non-negative integers.
- * - Empty quantities array is allowed (M1 preference for consistent empty progress).
+ * - An empty quantities array is allowed.
  */
 export function createProjectProgress(
   projectId: string,
@@ -279,9 +267,9 @@ export function createProjectProgress(
   if (state.trim() === '') {
     return { success: false, error: `invalid project state: ${state}` }
   }
-  for (let i = 0; i < quantities.length; i++) {
-    if (!Number.isInteger(quantities[i] as number) || (quantities[i] as number) < 0) {
-      return { success: false, error: `quantities[${i}] must be a non-negative integer` }
+  for (const [index, quantity] of quantities.entries()) {
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      return { success: false, error: `quantities[${index}] must be a non-negative integer` }
     }
   }
   return { success: true, value: { projectId, state, quantities } }
@@ -299,14 +287,12 @@ export interface HideoutProgress {
 }
 
 /** Validation result for HideoutProgress construction. */
-export type HideoutProgressResult =
-  | { readonly success: true; readonly value: HideoutProgress }
-  | { readonly success: false; readonly error: string }
+export type HideoutProgressResult = DomainResult<HideoutProgress>
 
 /**
  * Create a HideoutProgress, validating invariants.
  * - Resources must be non-negative integers.
- * - Empty resources array is allowed (M1 preference for consistent empty progress).
+ * - An empty resources array is allowed.
  */
 export function createHideoutProgress(
   hideoutId: string,
@@ -319,9 +305,9 @@ export function createHideoutProgress(
   if (state.trim() === '') {
     return { success: false, error: `invalid hideout state: ${state}` }
   }
-  for (let i = 0; i < resources.length; i++) {
-    if (!Number.isInteger(resources[i] as number) || (resources[i] as number) < 0) {
-      return { success: false, error: `resources[${i}] must be a non-negative integer` }
+  for (const [index, resource] of resources.entries()) {
+    if (!Number.isInteger(resource) || resource < 0) {
+      return { success: false, error: `resources[${index}] must be a non-negative integer` }
     }
   }
   return { success: true, value: { hideoutId, state, resources } }
@@ -339,9 +325,7 @@ export interface PlayerLoadout {
 }
 
 /** Validation result for PlayerLoadout construction. */
-export type PlayerLoadoutResult =
-  | { readonly success: true; readonly value: PlayerLoadout }
-  | { readonly success: false; readonly error: string }
+export type PlayerLoadoutResult = DomainResult<PlayerLoadout>
 
 /**
  * Create a PlayerLoadout, validating invariants.
@@ -368,9 +352,12 @@ export function createPlayerLoadout(
 // PlayerState — the single authoritative container
 // ---------------------------------------------------------------------------
 
-/** Full player state: identity, profile, snapshot metadata, and all progression data. */
+/**
+ * Full player state: profile, snapshot metadata, and all progression data.
+ * Identity lives in exactly one place: profile.playerId. There is no
+ * top-level playerId, so inconsistent identities cannot be represented.
+ */
 export interface PlayerState {
-  readonly playerId: string
   readonly profile: PlayerProfile
   readonly stash?: PlayerStash
   readonly hideoutProgress?: HideoutProgress
@@ -381,54 +368,106 @@ export interface PlayerState {
 }
 
 /** Validation result for PlayerState construction. */
-export type PlayerStateResult =
-  | { readonly success: true; readonly value: PlayerState }
-  | { readonly success: false; readonly error: string }
+export type PlayerStateResult = DomainResult<PlayerState>
 
 /**
- * Create a PlayerState, validating invariants.
- * - Validates playerId
- * - Validates profile (identity-only, no gameplay state)
- * - Validates stash capacity if present
- * - Validates all progression data
- * - Preserves the provided profile consistently — does NOT reconstruct or ignore it.
+ * Create a PlayerState, re-validating every nested value through the existing
+ * constructors so invalid nested data cannot silently enter PlayerState.
+ * Valid inputs are preserved as provided; only their invariants are checked.
+ * SnapshotMetadata is required explicitly — no default is invented.
  */
 export function createPlayerState(
-  playerId: string,
   profile: PlayerProfile,
-  stash?: PlayerStash,
-  hideoutProgress?: HideoutProgress,
-  projects?: readonly ProjectProgress[],
-  questProgress?: readonly QuestProgress[],
-  loadout?: PlayerLoadout,
-  snapshotMetadata?: SnapshotMetadata
+  stash: PlayerStash | undefined,
+  hideoutProgress: HideoutProgress | undefined,
+  projects: readonly ProjectProgress[] | undefined,
+  questProgress: readonly QuestProgress[] | undefined,
+  loadout: PlayerLoadout | undefined,
+  snapshotMetadata: SnapshotMetadata
 ): PlayerStateResult {
-  if (!isValidItemId(playerId)) {
-    return { success: false, error: `invalid playerId: ${playerId}` }
-  }
   if (!profile) {
     return { success: false, error: 'profile is required' }
   }
-  // Profile is preserved as-provided — no reconstruction, no ignoring.
-  // Validate the profile's playerId invariant.
-  if (!isValidItemId(profile.playerId)) {
-    return { success: false, error: `invalid profile.playerId: ${profile.playerId}` }
+  const profileResult = createPlayerProfile(profile.playerId)
+  if (profileResult.success === false) {
+    return { success: false, error: `invalid profile: ${profileResult.error}` }
   }
-  const effectiveSnapshotMetadata = snapshotMetadata ?? { capturedAt: 1700000000000 }
-  if (!Number.isInteger(effectiveSnapshotMetadata.capturedAt) || effectiveSnapshotMetadata.capturedAt < 0) {
-    return { success: false, error: `invalid snapshotMetadata.capturedAt: ${effectiveSnapshotMetadata.capturedAt}` }
+  const metadataError = validateSnapshotMetadata(snapshotMetadata)
+  if (metadataError !== undefined) {
+    return { success: false, error: metadataError }
+  }
+  if (stash !== undefined) {
+    const stashResult = createPlayerStash(
+      stash.id,
+      stash.items,
+      stash.capacity,
+      stash.freshness.capturedAt,
+      stash.freshness.source
+    )
+    if (stashResult.success === false) {
+      return { success: false, error: `invalid stash: ${stashResult.error}` }
+    }
+  }
+  if (hideoutProgress !== undefined) {
+    const hideoutResult = createHideoutProgress(
+      hideoutProgress.hideoutId,
+      hideoutProgress.state,
+      hideoutProgress.resources
+    )
+    if (hideoutResult.success === false) {
+      return { success: false, error: `invalid hideoutProgress: ${hideoutResult.error}` }
+    }
+  }
+  if (projects !== undefined) {
+    if (!Array.isArray(projects)) {
+      return { success: false, error: 'invalid projects: expected an array' }
+    }
+    for (const [index, project] of projects.entries()) {
+      const projectResult = createProjectProgress(
+        project.projectId,
+        project.state,
+        project.quantities
+      )
+      if (projectResult.success === false) {
+        return { success: false, error: `invalid projects[${index}]: ${projectResult.error}` }
+      }
+    }
+  }
+  if (questProgress !== undefined) {
+    if (!Array.isArray(questProgress)) {
+      return { success: false, error: 'invalid questProgress: expected an array' }
+    }
+    for (const [index, quest] of questProgress.entries()) {
+      const questResult = createQuestProgress(
+        quest.questId,
+        quest.state,
+        quest.quantities
+      )
+      if (questResult.success === false) {
+        return { success: false, error: `invalid questProgress[${index}]: ${questResult.error}` }
+      }
+    }
+  }
+  if (loadout !== undefined) {
+    const loadoutResult = createPlayerLoadout(
+      loadout.weaponId,
+      loadout.armorId,
+      loadout.accessoryId
+    )
+    if (loadoutResult.success === false) {
+      return { success: false, error: `invalid loadout: ${loadoutResult.error}` }
+    }
   }
   return {
     success: true,
     value: {
-      playerId,
       profile,
       stash,
       hideoutProgress,
       projects,
       questProgress,
       loadout,
-      snapshotMetadata: effectiveSnapshotMetadata,
+      snapshotMetadata,
     },
   }
 }

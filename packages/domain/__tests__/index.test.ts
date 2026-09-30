@@ -8,18 +8,23 @@ import {
   createPlayerProfile,
   createPlayerState,
   createPlayerLoadout,
-  type StashItemResult,
-  type PlayerStashResult,
-  type QuestProgressResult,
-  type ProjectProgressResult,
-  type HideoutProgressResult,
-  type PlayerProfileResult,
-  type PlayerStateResult,
-  type PlayerLoadoutResult,
   type DomainResult,
 } from '../index'
 
-import { FIXTURE_TIMESTAMP } from '../fixtures'
+import {
+  FIXTURE_TIMESTAMP,
+  validPlayerState,
+  validEmptyPlayerState,
+  validStashFixture,
+  invalidEmptyItemId,
+  invalidWhitespaceItemId,
+  invalidNegativeQuantity,
+  invalidFractionalQuantity,
+  invalidNegativeTotalSlots,
+  invalidNegativeUsedSlots,
+  invalidUsedSlotsExceedsTotal,
+  validUsedSlotsEqualsTotal,
+} from '../fixtures'
 
 // ---- Discriminated-union narrowing helpers ----
 
@@ -41,40 +46,27 @@ describe('Domain — StashItem', () => {
   })
 
   it('rejects empty ItemId', () => {
-    const result = createStashItem('', 1)
+    const result = createStashItem(invalidEmptyItemId, 1)
     assertFailure(result)
     expect(result.error).toContain('invalid itemId')
   })
 
   it('rejects whitespace-only ItemId', () => {
-    const result = createStashItem('  ', 1)
+    const result = createStashItem(invalidWhitespaceItemId, 1)
     assertFailure(result)
     expect(result.error).toContain('invalid itemId')
   })
 
   it('rejects negative quantity', () => {
-    const result = createStashItem('item-1', -1)
+    const result = createStashItem('item-1', invalidNegativeQuantity)
     assertFailure(result)
     expect(result.error).toContain('invalid quantity')
   })
 
   it('rejects fractional quantity', () => {
-    const result = createStashItem('item-1', 2.5)
+    const result = createStashItem('item-1', invalidFractionalQuantity)
     assertFailure(result)
     expect(result.error).toContain('invalid quantity')
-  })
-
-  it('rejects negative slotCount — StashItem has no slotCount field', () => {
-    // StashItem only has id and quantity per the new M1 model
-    const result = createStashItem('item-1', 1)
-    // slotCount was removed from StashItem; test passes as valid item
-    assertSuccess(result)
-  })
-
-  it('accepts usedSlots === slotCount — slot invariants at PlayerStash level', () => {
-    // Slot capacity invariants are enforced by PlayerStash, not StashItem
-    const result = createStashItem('item-1', 1)
-    assertSuccess(result)
   })
 })
 
@@ -82,43 +74,63 @@ describe('Domain — StashItem', () => {
 
 describe('Domain — PlayerStash', () => {
   it('accepts valid stash with capacity', () => {
-    const capacity = { totalSlots: 10, usedSlots: 3 }
-    const result = createPlayerStash('player-1', [{ id: 'item-1', quantity: 3 }], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash(
+      validStashFixture.id,
+      validStashFixture.items,
+      validStashFixture.capacity,
+      validStashFixture.capturedAt
+    )
     assertSuccess(result)
     expect(result.value.capacity).toEqual({ totalSlots: 10, usedSlots: 3 })
+    expect(result.value.freshness.capturedAt).toBe(FIXTURE_TIMESTAMP)
   })
 
   it('accepts empty stash with capacity', () => {
-    const capacity = { totalSlots: 10, usedSlots: 0 }
-    const result = createPlayerStash('player-1', [], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash('player-1', [], { totalSlots: 10, usedSlots: 0 }, FIXTURE_TIMESTAMP)
     assertSuccess(result)
     expect(result.value.items).toHaveLength(0)
   })
 
   it('rejects negative totalSlots', () => {
-    const capacity = { totalSlots: -1, usedSlots: 1 }
-    const result = createPlayerStash('player-1', [{ id: 'item-1', quantity: 1 }], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash(
+      'player-1',
+      [{ id: 'item-1', quantity: 1 }],
+      { totalSlots: invalidNegativeTotalSlots, usedSlots: 1 },
+      FIXTURE_TIMESTAMP
+    )
     assertFailure(result)
     expect(result.error).toContain('totalSlots must be a non-negative integer')
   })
 
   it('rejects negative usedSlots', () => {
-    const capacity = { totalSlots: 10, usedSlots: -1 }
-    const result = createPlayerStash('player-1', [{ id: 'item-1', quantity: 1 }], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash(
+      'player-1',
+      [{ id: 'item-1', quantity: 1 }],
+      { totalSlots: 10, usedSlots: invalidNegativeUsedSlots },
+      FIXTURE_TIMESTAMP
+    )
     assertFailure(result)
     expect(result.error).toContain('usedSlots must be a non-negative integer')
   })
 
   it('rejects usedSlots > totalSlots', () => {
-    const capacity = { totalSlots: 3, usedSlots: 5 }
-    const result = createPlayerStash('player-1', [{ id: 'item-1', quantity: 1 }], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash(
+      'player-1',
+      [{ id: 'item-1', quantity: 1 }],
+      invalidUsedSlotsExceedsTotal,
+      FIXTURE_TIMESTAMP
+    )
     assertFailure(result)
     expect(result.error).toContain('usedSlots must not exceed totalSlots')
   })
 
   it('accepts valid usedSlots === totalSlots', () => {
-    const capacity = { totalSlots: 5, usedSlots: 5 }
-    const result = createPlayerStash('player-1', [{ id: 'item-1', quantity: 3 }], capacity, FIXTURE_TIMESTAMP)
+    const result = createPlayerStash(
+      'player-1',
+      [{ id: 'item-1', quantity: 3 }],
+      validUsedSlotsEqualsTotal,
+      FIXTURE_TIMESTAMP
+    )
     assertSuccess(result)
   })
 
@@ -136,7 +148,7 @@ describe('Domain — PlayerStash', () => {
   it('validates items via createStashItem', () => {
     const result = createPlayerStash(
       'player-1',
-      [{ id: 'item-1', quantity: -1 }],
+      [{ id: 'item-1', quantity: invalidNegativeQuantity }],
       { totalSlots: 10, usedSlots: 1 },
       FIXTURE_TIMESTAMP
     )
@@ -167,7 +179,7 @@ describe('Domain — QuestProgress', () => {
   })
 
   it('rejects negative quantities', () => {
-    const result = createQuestProgress('q-1', 'active', [-1])
+    const result = createQuestProgress('q-1', 'active', [invalidNegativeQuantity])
     assertFailure(result)
     expect(result.error).toContain('non-negative integer')
   })
@@ -186,7 +198,7 @@ describe('Domain — ProjectProgress', () => {
   })
 
   it('rejects negative quantities', () => {
-    const result = createProjectProgress('p-1', 'active', [-1])
+    const result = createProjectProgress('p-1', 'active', [invalidNegativeQuantity])
     assertFailure(result)
     expect(result.error).toContain('non-negative integer')
   })
@@ -205,7 +217,7 @@ describe('Domain — HideoutProgress', () => {
   })
 
   it('rejects negative resources', () => {
-    const result = createHideoutProgress('h-1', 'active', [-1])
+    const result = createHideoutProgress('h-1', 'active', [invalidNegativeQuantity])
     assertFailure(result)
     expect(result.error).toContain('non-negative integer')
   })
@@ -225,19 +237,19 @@ describe('Domain — PlayerLoadout', () => {
   })
 
   it('rejects empty weaponId', () => {
-    const result = createPlayerLoadout('', undefined, undefined)
+    const result = createPlayerLoadout(invalidEmptyItemId, undefined, undefined)
     assertFailure(result)
     expect(result.error).toContain('invalid weaponId')
   })
 
   it('rejects empty armorId', () => {
-    const result = createPlayerLoadout(undefined, '', undefined)
+    const result = createPlayerLoadout(undefined, invalidEmptyItemId, undefined)
     assertFailure(result)
     expect(result.error).toContain('invalid armorId')
   })
 
   it('rejects empty accessoryId', () => {
-    const result = createPlayerLoadout(undefined, undefined, '')
+    const result = createPlayerLoadout(undefined, undefined, invalidEmptyItemId)
     assertFailure(result)
     expect(result.error).toContain('invalid accessoryId')
   })
@@ -253,23 +265,23 @@ describe('Domain — PlayerProfile', () => {
   })
 
   it('rejects empty playerId', () => {
-    const result = createPlayerProfile('')
+    const result = createPlayerProfile(invalidEmptyItemId)
     assertFailure(result)
     expect(result.error).toContain('invalid playerId')
   })
 
   it('rejects whitespace-only playerId', () => {
-    const result = createPlayerProfile('  ')
+    const result = createPlayerProfile(invalidWhitespaceItemId)
     assertFailure(result)
     expect(result.error).toContain('invalid playerId')
   })
 
   it('PlayerProfile contains NO gameplay state', () => {
-    // PlayerProfile is identity-only; stash/hideout/projects/quests/loadout are in PlayerState
+    // PlayerProfile is identity-only; stash/hideout/projects/quests/loadout live in PlayerState
     const result = createPlayerProfile('player-1')
     assertSuccess(result)
-    // No stash, hideout, projects, quests, or loadout in PlayerProfile
-    expect((result as any).value).toEqual({ playerId: 'player-1' })
+    expect(result.value).toEqual({ playerId: 'player-1' })
+    expect(Object.keys(result.value).sort()).toEqual(['playerId'])
   })
 })
 
@@ -278,29 +290,28 @@ describe('Domain — PlayerProfile', () => {
 describe('Domain — PlayerState', () => {
   it('accepts valid deterministic PlayerState fixture', () => {
     const result = createPlayerState(
-      'player-1',
-      { playerId: 'player-1' },
-      undefined,
-      undefined,
-      [],
-      [],
-      undefined,
-      { capturedAt: FIXTURE_TIMESTAMP }
+      validPlayerState.profile,
+      validPlayerState.stash,
+      validPlayerState.hideoutProgress,
+      validPlayerState.projects,
+      validPlayerState.questProgress,
+      validPlayerState.loadout,
+      validPlayerState.snapshotMetadata
     )
     assertSuccess(result)
-    expect(result.value.playerId).toBe('player-1')
+    expect(result.value.profile.playerId).toBe('player-1')
+    expect(result.value.snapshotMetadata.capturedAt).toBe(FIXTURE_TIMESTAMP)
   })
 
-  it('accepts valid empty PlayerState fixture', () => {
+  it('accepts valid deterministic empty PlayerState fixture', () => {
     const result = createPlayerState(
-      'player-2',
-      { playerId: 'player-2' },
-      undefined,
-      undefined,
-      [],
-      [],
-      undefined,
-      { capturedAt: FIXTURE_TIMESTAMP }
+      validEmptyPlayerState.profile,
+      validEmptyPlayerState.stash,
+      validEmptyPlayerState.hideoutProgress,
+      validEmptyPlayerState.projects,
+      validEmptyPlayerState.questProgress,
+      validEmptyPlayerState.loadout,
+      validEmptyPlayerState.snapshotMetadata
     )
     assertSuccess(result)
     expect(result.value.stash).toBeUndefined()
@@ -310,10 +321,9 @@ describe('Domain — PlayerState', () => {
     expect(result.value.loadout).toBeUndefined()
   })
 
-  it('rejects invalid timestamp', () => {
+  it('rejects invalid snapshot timestamp', () => {
     const result = createPlayerState(
-      'player-1',
-      { playerId: 'player-1' },
+      validPlayerState.profile,
       undefined,
       undefined,
       [],
@@ -325,10 +335,9 @@ describe('Domain — PlayerState', () => {
     expect(result.error).toContain('invalid snapshotMetadata.capturedAt')
   })
 
-  it('PlayerState preserves the provided PlayerProfile correctly', () => {
+  it('PlayerState preserves the provided PlayerProfile', () => {
     const profile = { playerId: 'test-player' }
     const result = createPlayerState(
-      'player-1',
       profile,
       undefined,
       undefined,
@@ -341,28 +350,24 @@ describe('Domain — PlayerState', () => {
     expect(result.value.profile).toBe(profile)
   })
 
-  it('no duplicated profile/state ownership', () => {
-    // PlayerProfile contains only playerId — no stash/hideout/projects/quests/loadout duplication
-    const profile = { playerId: 'owner-1' }
+  it('PlayerState identity lives only in profile (no duplicated ownership)', () => {
     const result = createPlayerState(
-      'player-1',
-      profile,
+      validPlayerState.profile,
       undefined,
       undefined,
       [],
       [],
       undefined,
-      { capturedAt: FIXTURE_TIMESTAMP }
+      validPlayerState.snapshotMetadata
     )
     assertSuccess(result)
-    expect(result.value.profile).toBe(profile)
-    expect(result.value.stash).toBeUndefined()
+    expect('playerId' in result.value).toBe(false)
+    expect(result.value.profile.playerId).toBe('player-1')
   })
 
-  it('validates profile inside player state', () => {
+  it('rejects invalid profile inside player state', () => {
     const result = createPlayerState(
-      'player-1',
-      { playerId: '' },
+      { playerId: invalidEmptyItemId },
       undefined,
       undefined,
       [],
@@ -371,5 +376,107 @@ describe('Domain — PlayerState', () => {
       { capturedAt: FIXTURE_TIMESTAMP }
     )
     assertFailure(result)
+    expect(result.error).toContain('invalid playerId')
+  })
+
+  it('rejects invalid nested stash via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      {
+        id: 'player-1',
+        items: [
+          { id: 'item-1', quantity: 1 },
+          { id: 'item-1', quantity: 2 },
+        ],
+        capacity: { totalSlots: 10, usedSlots: 3 },
+        freshness: { capturedAt: FIXTURE_TIMESTAMP },
+      },
+      undefined,
+      [],
+      [],
+      undefined,
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('duplicate stash item ID')
+  })
+
+  it('rejects invalid nested stash quantity via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      {
+        id: 'player-1',
+        items: [{ id: 'item-1', quantity: invalidNegativeQuantity }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: FIXTURE_TIMESTAMP },
+      },
+      undefined,
+      [],
+      [],
+      undefined,
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('invalid quantity')
+  })
+
+  it('rejects invalid nested quest data via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      undefined,
+      undefined,
+      [],
+      [{ questId: 'q-1', state: 'active', quantities: [invalidNegativeQuantity] }],
+      undefined,
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('non-negative integer')
+  })
+
+  it('rejects invalid nested project data via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      undefined,
+      undefined,
+      [{ projectId: 'p-1', state: 'active', quantities: [invalidNegativeQuantity] }],
+      [],
+      undefined,
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('non-negative integer')
+  })
+
+  it('rejects invalid nested hideout data via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      undefined,
+      {
+        hideoutId: 'h-1',
+        state: 'active',
+        resources: [invalidNegativeQuantity],
+      },
+      [],
+      [],
+      undefined,
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('non-negative integer')
+  })
+
+  it('rejects invalid nested loadout via PlayerState', () => {
+    const result = createPlayerState(
+      validPlayerState.profile,
+      undefined,
+      undefined,
+      [],
+      [],
+      { weaponId: invalidEmptyItemId },
+      { capturedAt: FIXTURE_TIMESTAMP }
+    )
+    assertFailure(result)
+    expect(result.error).toContain('invalid weaponId')
   })
 })
