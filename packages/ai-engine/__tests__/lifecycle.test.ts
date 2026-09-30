@@ -9,6 +9,7 @@ import {
 import {
   FAKE_DESCRIPTOR,
   FakeArtifactStore,
+  FakeModelSession,
   FakeRuntime,
   ScriptedGamingModeSource,
   SUPPORTED_CAPABILITIES,
@@ -59,6 +60,12 @@ async function installedFixture(): Promise<ReturnType<typeof setup>> {
   const result = await context.manager.install()
   if (result.state !== 'INSTALLED') throw new Error('expected INSTALLED fixture')
   return context
+}
+
+function liveSession(runtime: FakeRuntime): FakeModelSession {
+  const session = runtime.sessions[runtime.sessions.length - 1]
+  if (session === undefined) throw new Error('expected a live session')
+  return session
 }
 
 describe('Lifecycle — install', () => {
@@ -173,11 +180,13 @@ describe('Lifecycle — unload', () => {
   it('moves READY through UNLOADING to INSTALLED and releases the runtime', async () => {
     const { manager, runtime, store } = await installedFixture()
     await manager.load()
+    const session = liveSession(runtime)
     const pending = manager.unload()
     expect(manager.snapshot().state).toBe('UNLOADING')
     const finished = await pending
     expect(finished.state).toBe('INSTALLED')
-    expect(runtime.unloadCalls).toBe(1)
+    expect(session.unloadCalls).toBe(1)
+    expect(session.released).toBe(true)
     expect(runtime.acquired).toBe(false)
     expect(await store.isInstalled(FAKE_DESCRIPTOR)).toBe(true)
   })
@@ -185,20 +194,21 @@ describe('Lifecycle — unload', () => {
   it('treats repeated unload as a safe no-op', async () => {
     const { manager, runtime } = await installedFixture()
     await manager.load()
+    const session = liveSession(runtime)
     await manager.unload()
     const repeated = await manager.unload()
     expect(repeated.state).toBe('INSTALLED')
-    expect(runtime.unloadCalls).toBe(1)
+    expect(session.unloadCalls).toBe(1)
   })
 
   it('recovers from unload failure without claiming READY', async () => {
     const { manager, runtime } = await installedFixture()
     await manager.load()
-    runtime.unloadError = new Error('release failed')
+    liveSession(runtime).unloadError = new Error('release failed')
     const failed = await manager.unload()
     expect(failed.state).toBe('ERROR')
     expect(manager.snapshot().state).not.toBe('READY')
-    runtime.unloadError = undefined
+    liveSession(runtime).unloadError = undefined
     const retried = await manager.unload()
     expect(retried.state).toBe('INSTALLED')
   })
@@ -216,10 +226,12 @@ describe('Lifecycle — remove', () => {
   it('unloads first when removing from READY', async () => {
     const { manager, runtime, store } = await installedFixture()
     await manager.load()
+    const session = liveSession(runtime)
     const removed = await manager.remove()
     expect(removed.state).toBe('NOT_INSTALLED')
-    expect(runtime.unloadCalls).toBe(1)
-    expect(runtime.disposeCalls).toBe(1)
+    expect(session.unloadCalls).toBe(1)
+    expect(session.disposeCalls).toBe(1)
+    expect(session.released).toBe(true)
     expect(runtime.acquired).toBe(false)
     expect(await store.isInstalled(FAKE_DESCRIPTOR)).toBe(false)
   })
@@ -253,10 +265,10 @@ describe('Lifecycle — remove', () => {
     expect(loadFailed.error).toBe('load failed')
     runtime.loadError = undefined
     await manager.load()
-    runtime.unloadError = new Error(hostile)
+    liveSession(runtime).unloadError = new Error(hostile)
     const unloadFailed = await manager.unload()
     expect(unloadFailed.error).toBe('unload failed')
-    runtime.unloadError = undefined
+    liveSession(runtime).unloadError = undefined
     await manager.unload()
     store.removeError = new Error(hostile)
     const removeFailed = await manager.remove()

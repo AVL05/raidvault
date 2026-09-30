@@ -16,6 +16,7 @@ import type {
   GpuCapabilityEnvironment,
   GpuDeviceLike,
   GpuLike,
+  LoadedModelSession,
   LocalModelRuntime,
   ModelArtifactStore,
   ModelDescriptor,
@@ -46,28 +47,57 @@ export const UNSUPPORTED_CAPABILITIES: AiCapabilities = {
   reason: 'WebGPU is not available in this browser',
 }
 
-/** Deterministic runtime double with call counters and scripted faults. */
-export class FakeRuntime implements LocalModelRuntime {
-  public loadCalls = 0
+/** Deterministic owned-session double recording release calls. */
+export class FakeModelSession implements LoadedModelSession {
   public unloadCalls = 0
   public disposeCalls = 0
-  public acquired = false
-  public loadError: Error | undefined = undefined
+  public released = false
   public unloadError: Error | undefined = undefined
+  public disposeError: Error | undefined = undefined
+
+  async unload(): Promise<void> {
+    this.unloadCalls += 1
+    if (this.unloadError !== undefined) {
+      throw this.unloadError
+    }
+    this.released = true
+  }
+
+  async dispose(): Promise<void> {
+    this.disposeCalls += 1
+    if (this.disposeError !== undefined) {
+      throw this.disposeError
+    }
+    this.released = true
+  }
+}
+
+/** Deterministic runtime double handing out owned sessions. */
+export class FakeRuntime implements LocalModelRuntime {
+  public loadCalls = 0
+  public loadError: Error | undefined = undefined
   public holdLoads = false
+  public sessions: FakeModelSession[] = []
   private gated: Array<() => void> = []
 
-  async load(): Promise<void> {
+  /** True while a created session remains unreleased. */
+  public get acquired(): boolean {
+    return this.sessions.some((session) => !session.released)
+  }
+
+  async load(): Promise<FakeModelSession> {
     this.loadCalls += 1
     if (this.loadError !== undefined) {
       throw this.loadError
     }
+    const session = new FakeModelSession()
+    this.sessions.push(session)
     if (this.holdLoads) {
       await new Promise<void>((resolve) => {
         this.gated.push(resolve)
       })
     }
-    this.acquired = true
+    return session
   }
 
   /** Resolve every held load completion in order. */
@@ -77,19 +107,6 @@ export class FakeRuntime implements LocalModelRuntime {
     for (const resolve of pending) {
       resolve()
     }
-  }
-
-  async unload(): Promise<void> {
-    this.unloadCalls += 1
-    if (this.unloadError !== undefined) {
-      throw this.unloadError
-    }
-    this.acquired = false
-  }
-
-  async dispose(): Promise<void> {
-    this.disposeCalls += 1
-    this.acquired = false
   }
 }
 
@@ -101,6 +118,9 @@ export class FakeArtifactStore implements ModelArtifactStore {
   public removeError: Error | undefined = undefined
   public progressSequence: readonly number[] = [0, 0.5, 1]
   public seenProgress: number[] = []
+  public holdRemoves = false
+  public removeHeld = false
+  private gatedRemoves: Array<() => void> = []
   public modelBytes: number | undefined = 1024
   public usageBytes: number | undefined = 2048
   public quotaBytes: number | undefined = 4096
@@ -130,7 +150,23 @@ export class FakeArtifactStore implements ModelArtifactStore {
     if (this.removeError !== undefined) {
       throw this.removeError
     }
+    if (this.holdRemoves) {
+      this.removeHeld = true
+      await new Promise<void>((resolve) => {
+        this.gatedRemoves.push(resolve)
+      })
+    }
     this.installedIds.delete(descriptor.id)
+  }
+
+  /** Resolve every held remove completion in order. */
+  releaseRemoves(): void {
+    const pending = this.gatedRemoves
+    this.gatedRemoves = []
+    this.removeHeld = false
+    for (const resolve of pending) {
+      resolve()
+    }
   }
 
   async getStorageReport(descriptor: ModelDescriptor): Promise<StorageReport> {

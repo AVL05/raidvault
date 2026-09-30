@@ -52,9 +52,32 @@ export interface ModelManagerSnapshot {
 // Runtime and artifact-store abstractions (fakes in tests only)
 // ---------------------------------------------------------------------------
 
-/** Concrete model runtime behind the lifecycle. Acquire/release only. */
+/** Concrete model runtime behind the lifecycle. Loading is the only operation. */
 export interface LocalModelRuntime {
-  load(descriptor: ModelDescriptor): Promise<void>
+  load(descriptor: ModelDescriptor): Promise<LoadedModelSession>
+}
+
+/**
+ * Owned model session returned by a successful runtime load. Exactly
+ * one load operation owns each session: a stale completion disposes
+ * only its own session, so cleanup can never tear down a newer load.
+ * Implementations must release partial acquisitions before rejecting
+ * load(), so a failed load never leaves an owned session behind.
+ * Session release methods must tolerate sequential unload/dispose calls.
+ */
+export interface LoadedModelSession {
+  unload(): Promise<void>
+  dispose(): Promise<void>
+}
+
+/**
+ * Owned model session returned by a successful runtime load. Exactly
+ * one load operation owns each session: stale completions dispose only
+ * their own session, so cleanup can never tear down a newer load.
+ * Implementations must release partial acquisitions before rejecting
+ * load(), so a failed load never leaves an owned session behind.
+ */
+export interface LoadedModelSession {
   unload(): Promise<void>
   dispose(): Promise<void>
 }
@@ -369,6 +392,7 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
   let gamingMode: GamingModeStatus = UNKNOWN_GAMING_MODE
   let operationId = 0
   let activeOperation: ActiveOperation = 'NONE'
+  let session: LoadedModelSession | undefined = undefined
 
   /**
    * Acquire exclusive operation ownership synchronously, bumping the
@@ -483,8 +507,9 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       error = priorError
       return snapshot()
     }
+    let loaded: LoadedModelSession
     try {
-      await deps.runtime.load(descriptor)
+      loaded = await deps.runtime.load(descriptor)
     } catch {
       if (!release(operation)) {
         return snapshot()
@@ -494,8 +519,10 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       return snapshot()
     }
     if (!release(operation)) {
+      await bestEffort(() => loaded.dispose())
       return snapshot()
     }
+    session = loaded
     state = 'READY'
     return snapshot()
   }
@@ -514,12 +541,18 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
     }
     state = 'UNLOADING'
     error = undefined
+    const current = session
+    session = undefined
     try {
-      await deps.runtime.unload()
+      if (current !== undefined) {
+        await current.unload()
+        await current.dispose()
+      }
     } catch {
       if (!release(operation)) {
         return snapshot()
       }
+      session = current
       state = 'ERROR'
       error = safeMessage('unload')
       return snapshot()
@@ -544,8 +577,12 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       return snapshot()
     }
     error = undefined
-    await bestEffort(() => deps.runtime.unload())
-    await bestEffort(() => deps.runtime.dispose())
+    const current = session
+    session = undefined
+    if (current !== undefined) {
+      await bestEffort(() => current.unload())
+      await bestEffort(() => current.dispose())
+    }
     try {
       await deps.store.remove(descriptor)
     } catch {
@@ -578,7 +615,12 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       }
       state = 'UNLOADING'
       error = undefined
-      await bestEffort(() => deps.runtime.unload())
+      const current = session
+      session = undefined
+      if (current !== undefined) {
+        await bestEffort(() => current.unload())
+        await bestEffort(() => current.dispose())
+      }
       if (!release(operation)) {
         return snapshot()
       }
