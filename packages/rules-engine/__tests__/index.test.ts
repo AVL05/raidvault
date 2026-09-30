@@ -445,3 +445,83 @@ describe('Rules engine — determinism and safety', () => {
     expect(supported).toHaveLength(5)
   })
 })
+
+describe('Rules engine — duplicate progression references', () => {
+  function singleQuestKnowledge(): GameKnowledge {
+    return {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [
+        {
+          id: 'quest-a',
+          name: 'Quest A',
+          requirements: [{ itemId: 'rule-wire', quantity: 5 }],
+        },
+      ],
+      workshops: [],
+      projects: [],
+      metadata: baseMetadata(),
+    }
+  }
+
+  function singleProjectKnowledge(): GameKnowledge {
+    return {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [],
+      workshops: [],
+      projects: [
+        {
+          id: 'proj-a',
+          name: 'Project A',
+          requirements: [{ itemId: 'rule-wire', quantity: 5 }],
+        },
+      ],
+      metadata: baseMetadata(),
+    }
+  }
+
+  it('counts a duplicated quest progression reference once', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 0, ['quest-a', 'quest-a']),
+      singleQuestKnowledge()
+    )
+    const wire = row(analysis, 'rule-wire')
+    expect(wire.required).toBe(5)
+    expect(wire.missing).toBe(5)
+    expect(wire.classification).toBe('RESERVE')
+  })
+
+  it('counts a duplicated project progression reference once', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 0, [], ['proj-a', 'proj-a']),
+      singleProjectKnowledge()
+    )
+    const wire = row(analysis, 'rule-wire')
+    expect(wire.required).toBe(5)
+    expect(wire.missing).toBe(5)
+    expect(wire.classification).toBe('RESERVE')
+  })
+
+  it('still sums duplicate requirement entries inside one matched target', () => {
+    const knowledge: GameKnowledge = {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [
+        {
+          id: 'quest-a',
+          name: 'Quest A',
+          requirements: [
+            { itemId: 'rule-wire', quantity: 2 },
+            { itemId: 'rule-wire', quantity: 2 },
+          ],
+        },
+      ],
+      workshops: [],
+      projects: [],
+      metadata: baseMetadata(),
+    }
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 0, ['quest-a', 'quest-a']),
+      knowledge
+    )
+    expect(row(analysis, 'rule-wire').required).toBe(4)
+  })
+})

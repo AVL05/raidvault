@@ -48,12 +48,8 @@
  */
 
 import type { PlayerState } from '@raidvault/domain'
-import type {
-  GameKnowledge,
-  ItemRequirement,
-  ProjectRequirement,
-  QuestKnowledge,
-} from '@raidvault/game-data'
+import type { GameKnowledge, ItemRequirement } from '@raidvault/game-data'
+import { resolveActiveSources } from './active-sources'
 
 // ---------------------------------------------------------------------------
 // Result model (small, readonly, serializable)
@@ -115,18 +111,6 @@ function sumRequirements(
     }
   }
   return total
-}
-
-function indexTargetsById<Target extends { readonly id: string }>(
-  targets: readonly Target[]
-): Map<string, Target> {
-  const index = new Map<string, Target>()
-  for (const target of targets) {
-    if (!index.has(target.id)) {
-      index.set(target.id, target)
-    }
-  }
-  return index
 }
 
 function isKnownItem(knowledge: GameKnowledge, itemId: string): boolean {
@@ -275,33 +259,8 @@ export function analyzeStash(
   if (playerState.stash === undefined) {
     return { items: [], hasStash: false }
   }
-  const questIndex = indexTargetsById(gameKnowledge.quests)
-  const projectIndex = indexTargetsById(gameKnowledge.projects)
+  const sources = resolveActiveSources(playerState, gameKnowledge)
   const workshopMentioned = collectWorkshopMentions(gameKnowledge)
-
-  const activeQuests: QuestKnowledge[] = []
-  let progressionGaps = false
-  if (playerState.questProgress !== undefined) {
-    for (const progress of playerState.questProgress) {
-      const quest = questIndex.get(progress.questId)
-      if (quest === undefined) {
-        progressionGaps = true
-      } else {
-        activeQuests.push(quest)
-      }
-    }
-  }
-  const activeProjects: ProjectRequirement[] = []
-  if (playerState.projects !== undefined) {
-    for (const progress of playerState.projects) {
-      const project = projectIndex.get(progress.projectId)
-      if (project === undefined) {
-        progressionGaps = true
-      } else {
-        activeProjects.push(project)
-      }
-    }
-  }
 
   const items: ItemAnalysis[] = []
   for (const entry of playerState.stash.items) {
@@ -310,11 +269,11 @@ export function analyzeStash(
       continue
     }
     let questTotal = 0
-    for (const quest of activeQuests) {
+    for (const quest of sources.quests) {
       questTotal += sumRequirements(quest.requirements, entry.id)
     }
     let projectTotal = 0
-    for (const project of activeProjects) {
+    for (const project of sources.projects) {
       projectTotal += sumRequirements(project.requirements, entry.id)
     }
     items.push(
@@ -323,9 +282,261 @@ export function analyzeStash(
         entry.quantity,
         { quest: questTotal, project: projectTotal },
         workshopMentioned.has(entry.id),
-        progressionGaps
+        sources.progressionGaps
       )
     )
   }
   return { items, hasStash: true }
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic planning (M6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Planning turns M5 analysis plus per-target requirement gaps into
+ * deterministic views. Gross-gap semantics apply per target: owned units
+ * are counted against every pursuing target without implying allocation,
+ * so per-target gaps must never be summed as aggregates. Aggregate
+ * missing quantities use the same matched sources and the same missing
+ * equation as M5 (pinned equal by test), which additionally covers
+ * required items the player does not own and therefore have no M5 row.
+ * Workshops are excluded everywhere: workshopPlanningSupported is false
+ * and no workshop requirement enters totals.
+ */
+
+/** Requirement source kinds with deterministic planning support. */
+export type PlanningTargetType = 'QUEST' | 'PROJECT'
+
+/**
+ * Gross requirement gap for one item within one target. owned repeats
+ * the stash total per target on purpose; missingForTarget is the
+ * per-target shortfall against that total, not an allocated share.
+ */
+export interface RequirementGap {
+  readonly targetType: PlanningTargetType
+  readonly targetId: string
+  readonly itemId: string
+  readonly requiredForTarget: number
+  readonly owned: number
+  readonly missingForTarget: number
+}
+
+/** One pursued target with its per-item gaps and completion state. */
+export interface TargetPlan {
+  readonly targetType: PlanningTargetType
+  readonly targetId: string
+  readonly targetName: string | undefined
+  readonly complete: boolean
+  readonly requirements: readonly RequirementGap[]
+}
+
+/** Aggregated missing quantity for one item across pursued targets. */
+export interface MissingItemPlan {
+  readonly itemId: string
+  readonly displayName: string | undefined
+  readonly totalMissing: number
+  readonly sourceTypes: readonly PlanningTargetType[]
+  readonly sourceTargetIds: readonly string[]
+}
+
+/** Next-raid priority entry, ranked by missing quantity. */
+export interface RaidPriority {
+  readonly rank: number
+  readonly itemId: string
+  readonly displayName: string | undefined
+  readonly missing: number
+  readonly sourceTargetIds: readonly string[]
+}
+
+/** Progression reference with no matching catalog entry. */
+export interface IncompleteReference {
+  readonly targetType: PlanningTargetType
+  readonly targetId: string
+}
+
+/** Deterministic planning snapshot for presentation layers. */
+export interface PlanningSnapshot {
+  readonly hasStash: boolean
+  readonly targets: readonly TargetPlan[]
+  readonly missingItems: readonly MissingItemPlan[]
+  readonly raidPriorities: readonly RaidPriority[]
+  readonly incompleteReferences: readonly IncompleteReference[]
+  readonly workshopPlanningSupported: boolean
+}
+
+function displayNameOf(knowledge: GameKnowledge, itemId: string): string | undefined {
+  for (const item of knowledge.items) {
+    if (item.id === itemId) {
+      return item.name
+    }
+  }
+  return undefined
+}
+
+function buildTargetPlan(
+  targetType: PlanningTargetType,
+  targetId: string,
+  targetName: string | undefined,
+  requirements: readonly ItemRequirement[],
+  ownedByItem: ReadonlyMap<string, number>
+): TargetPlan {
+  const gaps: RequirementGap[] = requirements.map((requirement) => {
+    const owned = ownedByItem.get(requirement.itemId) ?? 0
+    return {
+      targetType,
+      targetId,
+      itemId: requirement.itemId,
+      requiredForTarget: requirement.quantity,
+      owned,
+      missingForTarget: Math.max(requirement.quantity - owned, 0),
+    }
+  })
+  return {
+    targetType,
+    targetId,
+    targetName,
+    complete: gaps.every((gap) => gap.missingForTarget === 0),
+    requirements: gaps,
+  }
+}
+
+function sourceTypesFor(itemId: string, targets: readonly TargetPlan[]): PlanningTargetType[] {
+  const types: PlanningTargetType[] = []
+  for (const target of targets) {
+    if (types.includes(target.targetType)) {
+      continue
+    }
+    for (const gap of target.requirements) {
+      if (gap.itemId === itemId) {
+        types.push(target.targetType)
+        break
+      }
+    }
+  }
+  return types
+}
+
+function sourceTargetIdsFor(itemId: string, targets: readonly TargetPlan[]): string[] {
+  const ids: string[] = []
+  for (const target of targets) {
+    if (ids.includes(target.targetId)) {
+      continue
+    }
+    for (const gap of target.requirements) {
+      if (gap.itemId === itemId) {
+        ids.push(target.targetId)
+        break
+      }
+    }
+  }
+  return ids
+}
+
+function compareMissing(left: MissingItemPlan, right: MissingItemPlan): number {
+  if (left.totalMissing !== right.totalMissing) {
+    return right.totalMissing - left.totalMissing
+  }
+  if (left.itemId === right.itemId) {
+    return 0
+  }
+  return left.itemId < right.itemId ? -1 : 1
+}
+
+/**
+ * Build a deterministic planning snapshot. Targets follow progression
+ * order (quests then projects), deduplicated by identity. Aggregate
+ * missing quantities come from M5 analysis, never from summing
+ * per-target gaps. Without a stash, owned quantities are unknown rather
+ * than zero, so targets and missing math stay empty while incomplete
+ * references are still surfaced. Inputs are never mutated.
+ */
+export function buildPlanningSnapshot(
+  playerState: PlayerState,
+  gameKnowledge: GameKnowledge
+): PlanningSnapshot {
+  const sources = resolveActiveSources(playerState, gameKnowledge)
+  const incompleteReferences: IncompleteReference[] = []
+  for (const targetId of sources.unknownQuestIds) {
+    incompleteReferences.push({ targetType: 'QUEST', targetId })
+  }
+  for (const targetId of sources.unknownProjectIds) {
+    incompleteReferences.push({ targetType: 'PROJECT', targetId })
+  }
+  if (playerState.stash === undefined) {
+    return {
+      hasStash: false,
+      targets: [],
+      missingItems: [],
+      raidPriorities: [],
+      incompleteReferences,
+      workshopPlanningSupported: false,
+    }
+  }
+
+  const ownedByItem = new Map<string, number>()
+  for (const entry of playerState.stash.items) {
+    ownedByItem.set(entry.id, entry.quantity)
+  }
+
+  const seenTargets = new Set<string>()
+  const targets: TargetPlan[] = []
+  for (const quest of sources.quests) {
+    const key = `QUEST:${quest.id}`
+    if (seenTargets.has(key)) {
+      continue
+    }
+    seenTargets.add(key)
+    targets.push(buildTargetPlan('QUEST', quest.id, quest.name, quest.requirements, ownedByItem))
+  }
+  for (const project of sources.projects) {
+    const key = `PROJECT:${project.id}`
+    if (seenTargets.has(key)) {
+      continue
+    }
+    seenTargets.add(key)
+    targets.push(
+      buildTargetPlan('PROJECT', project.id, project.name, project.requirements, ownedByItem)
+    )
+  }
+
+  const requiredByItem = new Map<string, number>()
+  for (const target of targets) {
+    for (const gap of target.requirements) {
+      requiredByItem.set(gap.itemId, (requiredByItem.get(gap.itemId) ?? 0) + gap.requiredForTarget)
+    }
+  }
+  const missingItems: MissingItemPlan[] = []
+  for (const [itemId, required] of requiredByItem) {
+    const owned = ownedByItem.get(itemId) ?? 0
+    const totalMissing = Math.max(required - owned, 0)
+    if (totalMissing <= 0) {
+      continue
+    }
+    missingItems.push({
+      itemId,
+      displayName: displayNameOf(gameKnowledge, itemId),
+      totalMissing,
+      sourceTypes: sourceTypesFor(itemId, targets),
+      sourceTargetIds: sourceTargetIdsFor(itemId, targets),
+    })
+  }
+
+  const ranked = [...missingItems].sort(compareMissing)
+  const raidPriorities: RaidPriority[] = ranked.map((item, index) => ({
+    rank: index + 1,
+    itemId: item.itemId,
+    displayName: item.displayName,
+    missing: item.totalMissing,
+    sourceTargetIds: item.sourceTargetIds,
+  }))
+
+  return {
+    hasStash: true,
+    targets,
+    missingItems,
+    raidPriorities,
+    incompleteReferences,
+    workshopPlanningSupported: false,
+  }
 }
