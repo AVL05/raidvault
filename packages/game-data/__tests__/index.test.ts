@@ -20,6 +20,7 @@ import {
   emptyItemIdPayload,
   emptyItemNamePayload,
   emptyQuestIdPayload,
+  emptyRequirementRefPayload,
   expectedGameKnowledge,
   fractionalQuantityPayload,
   invalidMetadataPayload,
@@ -28,7 +29,10 @@ import {
   malformedRecordPayload,
   minimalSourcePayload,
   negativeQuantityPayload,
+  originMismatchPayload,
   questWithoutNeedsPayload,
+  staleBeforeCapturePayload,
+  staleEqualCapturePayload,
   unknownReferencePayload,
   validSourcePayload,
   zeroQuantityPayload,
@@ -93,6 +97,28 @@ describe('GameData — valid datasets', () => {
     assertSuccess(second)
     expect(second.value).toEqual(first.value)
     expect(second.value).toEqual(expectedGameKnowledge)
+  })
+})
+
+// ---- Source identity ----
+
+describe('GameData — source identity', () => {
+  it('rejects a snapshot whose sourceId disagrees with the source', async () => {
+    const mismatchedSource: GameDataSource = {
+      sourceId: FIXTURE_SOURCE_ID,
+      load: () => Promise.resolve({ sourceId: 'foreign-source', payload: validSourcePayload }),
+    }
+    const result = await loadGameKnowledge(mismatchedSource)
+    assertFailure(result)
+    expect(result.error.kind).toBe('source-error')
+    expect(result.error.message).toContain('mismatch')
+  })
+
+  it('rejects a dataset origin disagreeing with the source', async () => {
+    const result = await loadPayload(originMismatchPayload)
+    assertFailure(result)
+    expect(result.error.kind).toBe('source-error')
+    expect(result.error.message).toContain('mismatch')
   })
 })
 
@@ -183,6 +209,13 @@ describe('GameData — requirements', () => {
     expect(result.error.kind).toBe('validation-error')
     expect(result.error.message).toContain('invalid requirement quantity')
   })
+
+  it('rejects an empty requirement item id', async () => {
+    const result = await loadPayload(emptyRequirementRefPayload)
+    assertFailure(result)
+    expect(result.error.kind).toBe('validation-error')
+    expect(result.error.message).toContain('invalid requirement item id')
+  })
 })
 
 // ---- Metadata, malformed records, source failures ----
@@ -200,6 +233,26 @@ describe('GameData — metadata and source boundary', () => {
     assertFailure(result)
     expect(result.error.kind).toBe('validation-error')
     expect(result.error.message).toContain('origin')
+  })
+
+  it('rejects staleAfter preceding capturedAt', async () => {
+    const result = await loadPayload(staleBeforeCapturePayload)
+    assertFailure(result)
+    expect(result.error.kind).toBe('validation-error')
+    expect(result.error.message).toContain('staleAfter')
+  })
+
+  it('accepts staleAfter equal to capturedAt', async () => {
+    const result = await loadPayload(staleEqualCapturePayload)
+    assertSuccess(result)
+    expect(result.value.metadata.capturedAt).toBe(FIXTURE_CAPTURED_AT)
+    expect(result.value.metadata.staleAfter).toBe(FIXTURE_CAPTURED_AT)
+  })
+
+  it('accepts staleAfter after capturedAt', async () => {
+    const result = await loadPayload(validSourcePayload)
+    assertSuccess(result)
+    expect(result.value.metadata.staleAfter).toBe(FIXTURE_STALE_AFTER)
   })
 
   it('rejects a malformed record', async () => {

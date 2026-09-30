@@ -350,6 +350,12 @@ function normalizeMetadata(
       value: { sourceId: origin, datasetVersion: revision, capturedAt: generatedAt },
     }
   }
+  if (staleAfter < generatedAt) {
+    return fail(
+      'validation-error',
+      `invalid dataset metadata: staleAfter (${staleAfter}) precedes capturedAt (${generatedAt})`
+    )
+  }
   return {
     success: true,
     value: { sourceId: origin, datasetVersion: revision, capturedAt: generatedAt, staleAfter },
@@ -363,7 +369,9 @@ function normalizeMetadata(
 /**
  * Load a source snapshot, validate the untrusted payload, and normalize it
  * into GameKnowledge. Fails fast with an explicit error; invalid records
- * are never silently discarded.
+ * are never silently discarded. The snapshot identity and the dataset origin
+ * must both match the loading source identity; mismatches are rejected so a
+ * foreign payload can never be normalized under the wrong source.
  */
 export async function loadGameKnowledge(
   source: GameDataSource
@@ -377,6 +385,13 @@ export async function loadGameKnowledge(
   }
   if (!isRecord(snapshot) || !isValidGameId(snapshot['sourceId'])) {
     return fail('source-error', 'invalid source snapshot: missing sourceId')
+  }
+  const snapshotSourceId = snapshot['sourceId']
+  if (snapshotSourceId !== source.sourceId) {
+    return fail(
+      'source-error',
+      `source identity mismatch: snapshot sourceId '${snapshotSourceId}' does not match source '${source.sourceId}'`
+    )
   }
 
   const payload = readPayload(snapshot['payload'])
@@ -425,6 +440,12 @@ export async function loadGameKnowledge(
   const metadataResult = normalizeMetadata(metadataRecord)
   if (metadataResult.success === false) {
     return metadataResult
+  }
+  if (metadataResult.value.sourceId !== source.sourceId) {
+    return fail(
+      'source-error',
+      `source identity mismatch: metadata origin '${metadataResult.value.sourceId}' does not match source '${source.sourceId}'`
+    )
   }
 
   return {

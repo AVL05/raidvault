@@ -240,6 +240,39 @@ export const invalidMetadataPayload: RawGameDataPayload = withMetadata({
   generatedAt: FIXTURE_CAPTURED_AT,
 })
 
+/** Invalid: requirement references an empty item id with a positive quantity. */
+export const emptyRequirementRefPayload: RawGameDataPayload = withQuests([
+  {
+    uid: 'syn-quest-recon',
+    label: 'Synthetic Recon',
+    needs: [{ ref: '', qty: 1 }],
+  },
+])
+
+/** Invalid: dataset origin disagrees with the loading source identity. */
+export const originMismatchPayload: RawGameDataPayload = withMetadata({
+  origin: 'foreign-origin',
+  revision: FIXTURE_DATASET_VERSION,
+  generatedAt: FIXTURE_CAPTURED_AT,
+  staleAfter: FIXTURE_STALE_AFTER,
+})
+
+/** Invalid: staleAfter precedes the capture timestamp. */
+export const staleBeforeCapturePayload: RawGameDataPayload = withMetadata({
+  origin: FIXTURE_SOURCE_ID,
+  revision: FIXTURE_DATASET_VERSION,
+  generatedAt: FIXTURE_CAPTURED_AT,
+  staleAfter: FIXTURE_CAPTURED_AT - 1,
+})
+
+/** Valid: staleAfter equals the capture timestamp. */
+export const staleEqualCapturePayload: RawGameDataPayload = withMetadata({
+  origin: FIXTURE_SOURCE_ID,
+  revision: FIXTURE_DATASET_VERSION,
+  generatedAt: FIXTURE_CAPTURED_AT,
+  staleAfter: FIXTURE_CAPTURED_AT,
+})
+
 /** Invalid: item collection holds a non-object record. */
 export const malformedRecordPayload: RawGameDataPayload = withItems(['not-an-object'])
 
