@@ -98,7 +98,14 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
-  packages/rules-engine: {}
+  packages/rules-engine:
+    dependencies:
+      '@raidvault/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@raidvault/game-data':
+        specifier: workspace:*
+        version: link:../game-data
 
   packages/shared: {}
 
