@@ -30,6 +30,9 @@ importers:
       '@raidvault/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@raidvault/rules-engine':
+        specifier: workspace:*
+        version: link:../../packages/rules-engine
       next:
         specifier: 16.3.6
         version: 16.3.6(@types/node@20.19.43)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

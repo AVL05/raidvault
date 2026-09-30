@@ -3,7 +3,9 @@ import {
   createMockPlayerProvider,
   createPlayerStateSnapshotCache,
 } from '@raidvault/providers'
+import { buildPlanningSnapshot } from '@raidvault/rules-engine'
 import { StashBrowser } from '../stash/stash-browser'
+import { PlanningSection } from '../stash/planning-section'
 import { UnavailablePanel } from '../stash/unavailable-panel'
 import {
   buildStashRows,
@@ -53,7 +55,9 @@ export default async function Home() {
   }
 
   const snapshot = snapshotResult.value
-  const rows = buildStashRows(snapshot.state, knowledgeResult.value)
+  const knowledge = knowledgeResult.value
+  const rows = buildStashRows(snapshot.state, knowledge)
+  const planning = buildPlanningSnapshot(snapshot.state, knowledge)
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
@@ -65,6 +69,7 @@ export default async function Home() {
           summary={summarizeStash(snapshot.state)}
           status={describeSnapshot(snapshot)}
         />
+        <PlanningSection planning={planning} />
       </div>
     </main>
   )
