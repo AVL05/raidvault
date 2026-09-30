@@ -3,8 +3,8 @@
  *
  * Bridges the untyped browser WebGPU surface (absent from the TypeScript
  * DOM library) into the ai-engine capability model. Each narrow
- * structural assertion below is immediately verified by behavior: any
- * misshapen surface resolves to an absent GPU, and detection treats
+ * structural assertion below is immediately verified by behavior:
+ * misshapen surfaces resolve to an absent GPU, and detection treats
  * every failure as unsupported. No user-agent inspection anywhere.
  */
 
@@ -23,10 +23,12 @@ function asGpuLike(value: unknown): GpuLike | undefined {
   if (typeof holder.requestAdapter !== 'function') {
     return undefined
   }
+  // Invoke through the original receiver: native Web APIs may
+  // brand-check `this`, so a detached call could fail incorrectly.
   const requestAdapter = holder.requestAdapter as () => Promise<unknown>
   return {
     requestAdapter: () =>
-      requestAdapter().then((adapter) => {
+      requestAdapter.call(value).then((adapter) => {
         if (typeof adapter !== 'object' || adapter === null) {
           return null
         }
@@ -37,7 +39,7 @@ function asGpuLike(value: unknown): GpuLike | undefined {
         const requestDevice = holderAdapter.requestDevice as () => Promise<unknown>
         const wrapped: GpuAdapterLike = {
           requestDevice: () =>
-            requestDevice().then((device): GpuDeviceLike | null => {
+            requestDevice.call(adapter).then((device): GpuDeviceLike | null => {
               if (typeof device !== 'object' || device === null) {
                 return null
               }
@@ -48,7 +50,7 @@ function asGpuLike(value: unknown): GpuLike | undefined {
               }
               const destroy = holderDevice.destroy as () => void
               const releasable: GpuDeviceLike = {
-                destroy: () => destroy(),
+                destroy: () => destroy.call(device),
               }
               return releasable
             }),

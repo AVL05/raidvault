@@ -309,6 +309,20 @@ export interface ModelManager {
   storage(): Promise<StorageReport>
 }
 
+/**
+ * Internal exclusive operation ownership. Exactly one lifecycle action
+ * holds the lock at a time; it is acquired synchronously before the
+ * first await. Never exposed publicly; the seven lifecycle states stay
+ * the only public vocabulary.
+ */
+type ActiveOperation =
+  | 'NONE'
+  | 'INSTALL'
+  | 'LOAD'
+  | 'UNLOAD'
+  | 'REMOVE'
+  | 'GAMING_MODE_UNLOAD'
+
 function clampProgress(value: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return 0
@@ -322,10 +336,7 @@ function clampProgress(value: number): number {
   return value
 }
 
-function safeMessage(error: unknown, context: string): string {
-  if (error instanceof Error && error.message !== '') {
-    return `${context} failed: ${error.message}`
-  }
+function safeMessage(context: 'install' | 'load' | 'unload' | 'remove'): string {
   return `${context} failed`
 }
 
@@ -341,11 +352,14 @@ async function bestEffort(work: () => Promise<void>): Promise<void> {
  * Create a model manager. State transitions are set synchronously
  * before the first await of each accepted action, so concurrent
  * duplicate calls observe the transitional state and become safe
- * no-ops deterministically. A monotonically increasing generation
- * invalidates stale async completions: a superseded completion can
- * never restore READY, INSTALLED, or another lifecycle state. remove() commits
- * its terminal state unconditionally after artifact deletion so racing
- * fail-safe actions converge on artifact truth.
+ * no-ops deterministically. Two mechanisms protect async completions:
+ * an internal operation lock gives exactly one action exclusive
+ * ownership at a time (remove preempts install and load; unload and
+ * fail-safe enforcement preempt load; nothing preempts remove), and a
+ * monotonically increasing generation invalidates stale completions, so
+ * a superseded completion can never restore a lifecycle state.
+ * remove() commits its terminal state once artifact deletion succeeds;
+ * exclusivity guarantees no later load can supersede it.
  */
 export function createModelManager(deps: ModelManagerDeps): ModelManager {
   let state: ModelLifecycleState = 'NOT_INSTALLED'
@@ -354,6 +368,39 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
   let error: string | undefined = undefined
   let gamingMode: GamingModeStatus = UNKNOWN_GAMING_MODE
   let operationId = 0
+  let activeOperation: ActiveOperation = 'NONE'
+
+  /**
+   * Acquire exclusive operation ownership synchronously, bumping the
+   * generation so earlier work goes stale. Returns undefined when the
+   * requested action may not preempt the current owner.
+   */
+  function acquire(next: Exclude<ActiveOperation, 'NONE'>): number | undefined {
+    const preempts =
+      activeOperation === 'NONE' ||
+      (next === 'REMOVE' &&
+        (activeOperation === 'INSTALL' || activeOperation === 'LOAD')) ||
+      (next === 'UNLOAD' && activeOperation === 'LOAD') ||
+      (next === 'GAMING_MODE_UNLOAD' && activeOperation === 'LOAD')
+    if (!preempts) {
+      return undefined
+    }
+    operationId += 1
+    activeOperation = next
+    return operationId
+  }
+
+  /**
+   * Release ownership after a terminal completion. Returns false (leaving
+   * ownership untouched) when a newer action already superseded this one.
+   */
+  function release(operation: number): boolean {
+    if (operation !== operationId) {
+      return false
+    }
+    activeOperation = 'NONE'
+    return true
+  }
 
   function snapshot(): ModelManagerSnapshot {
     return {
@@ -374,8 +421,10 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
     if (state !== 'NOT_INSTALLED' && !(state === 'ERROR' && !installed)) {
       return snapshot()
     }
-    operationId += 1
-    const operation = operationId
+    const operation = acquire('INSTALL')
+    if (operation === undefined) {
+      return snapshot()
+    }
     state = 'INSTALLING'
     progress = 0
     error = undefined
@@ -386,16 +435,16 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
         }
         progress = clampProgress(value)
       })
-    } catch (failure) {
-      if (operation !== operationId) {
+    } catch {
+      if (!release(operation)) {
         return snapshot()
       }
       state = 'ERROR'
       progress = undefined
-      error = safeMessage(failure, 'install')
+      error = safeMessage('install')
       return snapshot()
     }
-    if (operation !== operationId) {
+    if (!release(operation)) {
       return snapshot()
     }
     state = 'INSTALLED'
@@ -415,8 +464,10 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
     if (state !== 'INSTALLED' && !(state === 'ERROR' && installed)) {
       return snapshot()
     }
-    operationId += 1
-    const operation = operationId
+    const operation = acquire('LOAD')
+    if (operation === undefined) {
+      return snapshot()
+    }
     const priorState = state
     const priorError = error
     state = 'LOADING'
@@ -427,21 +478,22 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       return snapshot()
     }
     if (mode !== 'INACTIVE') {
+      activeOperation = 'NONE'
       state = priorState
       error = priorError
       return snapshot()
     }
     try {
       await deps.runtime.load(descriptor)
-    } catch (failure) {
-      if (operation !== operationId) {
+    } catch {
+      if (!release(operation)) {
         return snapshot()
       }
       state = 'ERROR'
-      error = safeMessage(failure, 'load')
+      error = safeMessage('load')
       return snapshot()
     }
-    if (operation !== operationId) {
+    if (!release(operation)) {
       return snapshot()
     }
     state = 'READY'
@@ -456,21 +508,23 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
     ) {
       return snapshot()
     }
-    operationId += 1
-    const operation = operationId
+    const operation = acquire('UNLOAD')
+    if (operation === undefined) {
+      return snapshot()
+    }
     state = 'UNLOADING'
     error = undefined
     try {
       await deps.runtime.unload()
-    } catch (failure) {
-      if (operation !== operationId) {
+    } catch {
+      if (!release(operation)) {
         return snapshot()
       }
       state = 'ERROR'
-      error = safeMessage(failure, 'unload')
+      error = safeMessage('unload')
       return snapshot()
     }
-    if (operation !== operationId) {
+    if (!release(operation)) {
       return snapshot()
     }
     state = 'INSTALLED'
@@ -485,15 +539,24 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
     if (state === 'NOT_INSTALLED') {
       return snapshot()
     }
-    operationId += 1
+    const operation = acquire('REMOVE')
+    if (operation === undefined) {
+      return snapshot()
+    }
     error = undefined
     await bestEffort(() => deps.runtime.unload())
     await bestEffort(() => deps.runtime.dispose())
     try {
       await deps.store.remove(descriptor)
-    } catch (failure) {
+    } catch {
+      if (!release(operation)) {
+        return snapshot()
+      }
       state = 'ERROR'
-      error = safeMessage(failure, 'remove')
+      error = safeMessage('remove')
+      return snapshot()
+    }
+    if (!release(operation)) {
       return snapshot()
     }
     state = 'NOT_INSTALLED'
@@ -509,12 +572,14 @@ export function createModelManager(deps: ModelManagerDeps): ModelManager {
       (mode === 'ACTIVE' || mode === 'UNKNOWN') &&
       (state === 'READY' || state === 'LOADING')
     ) {
-      operationId += 1
-      const operation = operationId
+      const operation = acquire('GAMING_MODE_UNLOAD')
+      if (operation === undefined) {
+        return snapshot()
+      }
       state = 'UNLOADING'
       error = undefined
       await bestEffort(() => deps.runtime.unload())
-      if (operation !== operationId) {
+      if (!release(operation)) {
         return snapshot()
       }
       state = 'INSTALLED'

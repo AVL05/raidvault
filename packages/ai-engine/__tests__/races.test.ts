@@ -15,17 +15,19 @@ function setup(): {
   manager: ModelManager
   runtime: FakeRuntime
   store: FakeArtifactStore
+  source: ScriptedGamingModeSource
 } {
   const runtime = new FakeRuntime()
   const store = new FakeArtifactStore()
+  const source = new ScriptedGamingModeSource('INACTIVE')
   const manager = createModelManager({
     descriptor: FAKE_DESCRIPTOR,
     runtime,
     store,
     capabilities: SUPPORTED_CAPABILITIES,
-    gamingModeSource: new ScriptedGamingModeSource('INACTIVE'),
+    gamingModeSource: source,
   })
-  return { manager, runtime, store }
+  return { manager, runtime, store, source }
 }
 
 describe('Races — stale completions', () => {
@@ -94,5 +96,98 @@ describe('Races — stale completions', () => {
     await pendingInstall
     expect(manager.snapshot().state).toBe('NOT_INSTALLED')
     expect(await store.isInstalled(FAKE_DESCRIPTOR)).toBe(false)
+  })
+})
+
+describe('Races — remove operation ownership', () => {
+  async function installedContext(): Promise<ReturnType<typeof setup>> {
+    const context = setup()
+    const installed = await context.manager.install()
+    if (installed.state !== 'INSTALLED') throw new Error('expected INSTALLED fixture')
+    return context
+  }
+
+  // Async functions never settle synchronously, so calling load()
+  // synchronously after remove() guarantees remove is still in flight
+  // with exclusive ownership. No timers or holds are needed for the
+  // adversarial ordering below.
+  it('blocks a concurrent load while remove holds the operation', async () => {
+    const { manager, runtime, store } = await installedContext()
+    const removing = manager.remove()
+    const blocked = await manager.load()
+    expect(blocked.state).toBe('INSTALLED')
+    expect(runtime.loadCalls).toBe(0)
+    const removed = await removing
+    expect(removed.state).toBe('NOT_INSTALLED')
+    expect(removed.installed).toBe(false)
+    expect(manager.snapshot().state).toBe('NOT_INSTALLED')
+    expect(manager.snapshot().state).not.toBe('READY')
+    expect(runtime.acquired).toBe(false)
+    expect(await store.isInstalled(FAKE_DESCRIPTOR)).toBe(false)
+  })
+
+  it('blocks a concurrent load while remove runs from ERROR with artifacts', async () => {
+    const { manager, runtime, store } = await installedContext()
+    runtime.loadError = new Error('device lost')
+    const failed = await manager.load()
+    expect(failed.state).toBe('ERROR')
+    runtime.loadError = undefined
+    const removing = manager.remove()
+    const blocked = await manager.load()
+    expect(blocked.state).toBe('ERROR')
+    expect(runtime.loadCalls).toBe(1)
+    const removed = await removing
+    expect(removed.state).toBe('NOT_INSTALLED')
+    expect(manager.snapshot().state).toBe('NOT_INSTALLED')
+  })
+
+  it('blocks a concurrent load while remove runs from READY', async () => {
+    const { manager, runtime, store } = await installedContext()
+    const ready = await manager.load()
+    expect(ready.state).toBe('READY')
+    const removing = manager.remove()
+    const blocked = await manager.load()
+    expect(blocked.state).toBe('READY')
+    expect(runtime.loadCalls).toBe(1)
+    const removed = await removing
+    expect(removed.state).toBe('NOT_INSTALLED')
+    expect(manager.snapshot().state).not.toBe('READY')
+  })
+
+  it('treats a second concurrent remove as a safe no-op', async () => {
+    const { manager, store } = await installedContext()
+    const first = manager.remove()
+    const second = await manager.remove()
+    expect(second.state).toBe('INSTALLED')
+    const done = await first
+    expect(done.state).toBe('NOT_INSTALLED')
+    expect(manager.snapshot().state).toBe('NOT_INSTALLED')
+    expect(store.removeCalls).toBe(1)
+  })
+
+  it('keeps remove failure authoritative against a blocked stale load', async () => {
+    const { manager, runtime, store } = await installedContext()
+    store.removeError = new Error('delete failed')
+    const removing = manager.remove()
+    const blocked = await manager.load()
+    expect(blocked.state).toBe('INSTALLED')
+    expect(runtime.loadCalls).toBe(0)
+    const failed = await removing
+    expect(failed.state).toBe('ERROR')
+    expect(failed.error).toBe('remove failed')
+    expect(await store.isInstalled(FAKE_DESCRIPTOR)).toBe(true)
+    expect(manager.snapshot().state).toBe('ERROR')
+  })
+
+  it('lets refresh track status without disturbing a held remove', async () => {
+    const { manager, store, source } = await installedContext()
+    const removing = manager.remove()
+    source.status = 'ACTIVE'
+    const refreshed = await manager.refreshGamingMode()
+    expect(refreshed.state).toBe('INSTALLED')
+    expect(refreshed.gamingMode).toBe('ACTIVE')
+    const removed = await removing
+    expect(removed.state).toBe('NOT_INSTALLED')
+    expect(manager.snapshot().state).toBe('NOT_INSTALLED')
   })
 })

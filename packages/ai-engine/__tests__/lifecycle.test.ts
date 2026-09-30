@@ -239,6 +239,39 @@ describe('Lifecycle — remove', () => {
     expect(removed.state).toBe('NOT_INSTALLED')
     expect(store.removeCalls).toBe(0)
   })
+
+  it('exposes fixed deterministic errors without collaborator details', async () => {
+    const hostile = 'C:\\Users\\victim\\secrets GPU driver internal 0xDEAD secret-token-abc'
+    const { manager, runtime, store } = setup()
+    store.installError = new Error(hostile)
+    const installFailed = await manager.install()
+    expect(installFailed.error).toBe('install failed')
+    store.installError = undefined
+    await manager.install()
+    runtime.loadError = new Error(hostile)
+    const loadFailed = await manager.load()
+    expect(loadFailed.error).toBe('load failed')
+    runtime.loadError = undefined
+    await manager.load()
+    runtime.unloadError = new Error(hostile)
+    const unloadFailed = await manager.unload()
+    expect(unloadFailed.error).toBe('unload failed')
+    runtime.unloadError = undefined
+    await manager.unload()
+    store.removeError = new Error(hostile)
+    const removeFailed = await manager.remove()
+    expect(removeFailed.error).toBe('remove failed')
+    for (const message of [
+      installFailed.error,
+      loadFailed.error,
+      unloadFailed.error,
+      removeFailed.error,
+    ]) {
+      expect(message).not.toContain('C:\\Users')
+      expect(message).not.toContain('driver internal')
+      expect(message).not.toContain('secret-token')
+    }
+  })
 })
 
 describe('Lifecycle — storage', () => {
