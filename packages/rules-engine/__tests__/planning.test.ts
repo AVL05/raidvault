@@ -493,3 +493,60 @@ describe('Planning — determinism and safety', () => {
     expect(JSON.stringify(knowledge)).toBe(beforeKnowledge)
   })
 })
+
+describe('Planning — duplicate progression references', () => {
+  it('matches M5 aggregate missing with duplicated quest progression', () => {
+    const knowledge = makeKnowledge({ quests: [quest('qa', [['plan-wire', 5]])] })
+    const state = planState([{ id: 'plan-wire', quantity: 0 }], ['qa', 'qa'])
+    const planning = buildPlanningSnapshot(state, knowledge)
+    expect(missing(planning, 'plan-wire').totalMissing).toBe(5)
+    const analysis = analyzeStash(state, knowledge)
+    const m5row = analysis.items.find((entry) => entry.itemId === 'plan-wire')
+    if (m5row === undefined) throw new Error('expected M5 row')
+    expect(missing(planning, 'plan-wire').totalMissing).toBe(m5row.missing)
+  })
+
+  it('matches M5 aggregate missing with duplicated project progression', () => {
+    const knowledge = makeKnowledge({ projects: [project('pa', [['plan-wire', 5]])] })
+    const state = planState([{ id: 'plan-wire', quantity: 0 }], [], ['pa', 'pa'])
+    const planning = buildPlanningSnapshot(state, knowledge)
+    expect(missing(planning, 'plan-wire').totalMissing).toBe(5)
+    const analysis = analyzeStash(state, knowledge)
+    const m5row = analysis.items.find((entry) => entry.itemId === 'plan-wire')
+    if (m5row === undefined) throw new Error('expected M5 row')
+    expect(missing(planning, 'plan-wire').totalMissing).toBe(m5row.missing)
+  })
+
+  it('lists one target per duplicated quest ID in first-occurrence order', () => {
+    const knowledge = makeKnowledge({
+      quests: [quest('qb', [['plan-wire', 1]]), quest('qa', [['plan-wire', 2]])],
+    })
+    const planning = buildPlanningSnapshot(
+      planState([{ id: 'plan-wire', quantity: 0 }], ['qb', 'qa', 'qb']),
+      knowledge
+    )
+    expect(planning.targets.map((entry) => entry.targetId)).toEqual(['qb', 'qa'])
+  })
+
+  it('lists one target per duplicated project ID in first-occurrence order', () => {
+    const knowledge = makeKnowledge({
+      projects: [project('pb', [['plan-wire', 1]]), project('pa', [['plan-wire', 2]])],
+    })
+    const planning = buildPlanningSnapshot(
+      planState([{ id: 'plan-wire', quantity: 0 }], [], ['pb', 'pa', 'pb']),
+      knowledge
+    )
+    expect(planning.targets.map((entry) => entry.targetId)).toEqual(['pb', 'pa'])
+  })
+
+  it('keeps unknown duplicate IDs deduplicated in incomplete references', () => {
+    const knowledge = makeKnowledge({ quests: [quest('qa', [['plan-wire', 5]])] })
+    const planning = buildPlanningSnapshot(
+      planState([{ id: 'plan-wire', quantity: 0 }], ['ghost-quest', 'ghost-quest']),
+      knowledge
+    )
+    expect(planning.incompleteReferences).toEqual([
+      { targetType: 'QUEST', targetId: 'ghost-quest' },
+    ])
+  })
+})

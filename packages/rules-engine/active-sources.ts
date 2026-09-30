@@ -41,8 +41,11 @@ function indexTargetsById<Target extends { readonly id: string }>(
 
 /**
  * Resolve current progression references against the knowledge catalog.
- * Unknown references are collected (deduplicated, progression order) and
- * flagged; they never contribute requirements.
+ * Each logical quest or project ID contributes at most once: repeated
+ * progression references resolve to the first occurrence in progression
+ * order, so M5 and M6 share one authoritative active-source semantic.
+ * Unknown references are collected deduplicated and never contribute
+ * requirements.
  */
 export function resolveActiveSources(
   playerState: PlayerState,
@@ -53,6 +56,7 @@ export function resolveActiveSources(
 
   const quests: QuestKnowledge[] = []
   const unknownQuestIds: string[] = []
+  const seenQuestIds = new Set<string>()
   const seenUnknownQuests = new Set<string>()
   if (playerState.questProgress !== undefined) {
     for (const progress of playerState.questProgress) {
@@ -62,7 +66,8 @@ export function resolveActiveSources(
           seenUnknownQuests.add(progress.questId)
           unknownQuestIds.push(progress.questId)
         }
-      } else {
+      } else if (!seenQuestIds.has(progress.questId)) {
+        seenQuestIds.add(progress.questId)
         quests.push(quest)
       }
     }
@@ -70,6 +75,7 @@ export function resolveActiveSources(
 
   const projects: ProjectRequirement[] = []
   const unknownProjectIds: string[] = []
+  const seenProjectIds = new Set<string>()
   const seenUnknownProjects = new Set<string>()
   if (playerState.projects !== undefined) {
     for (const progress of playerState.projects) {
@@ -79,7 +85,8 @@ export function resolveActiveSources(
           seenUnknownProjects.add(progress.projectId)
           unknownProjectIds.push(progress.projectId)
         }
-      } else {
+      } else if (!seenProjectIds.has(progress.projectId)) {
+        seenProjectIds.add(progress.projectId)
         projects.push(project)
       }
     }
