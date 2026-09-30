@@ -21,6 +21,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@raidvault/ai-engine':
+        specifier: workspace:*
+        version: link:../../packages/ai-engine
       '@raidvault/domain':
         specifier: workspace:*
         version: link:../../packages/domain

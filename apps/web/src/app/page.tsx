@@ -4,6 +4,7 @@ import {
   createPlayerStateSnapshotCache,
 } from '@raidvault/providers'
 import { buildPlanningSnapshot } from '@raidvault/rules-engine'
+import { AiEnginePanel } from '../ai/ai-panel'
 import { StashBrowser } from '../stash/stash-browser'
 import { PlanningSection } from '../stash/planning-section'
 import { UnavailablePanel } from '../stash/unavailable-panel'
@@ -70,6 +71,15 @@ export default async function Home() {
           status={describeSnapshot(snapshot)}
         />
         <PlanningSection planning={planning} />
+        <section aria-labelledby="ai-heading" className="mt-8">
+          <h2 id="ai-heading" className="mb-1 text-xl font-bold text-gray-900">
+            Local AI
+          </h2>
+          <p className="mb-4 text-sm text-gray-600">
+            Optional on-device engine. No model is configured in this build.
+          </p>
+          <AiEnginePanel />
+        </section>
       </div>
     </main>
   )
