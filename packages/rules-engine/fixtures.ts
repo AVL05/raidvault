@@ -115,6 +115,8 @@ export const stateWithItems: PlayerState = {
     capacity: { totalSlots: 10, usedSlots: 3 },
     freshness: { capturedAt: FIXTURE_CAPTURED_AT },
   },
+  questProgress: [{ questId: 'rule-quest', state: 'active', quantities: [] }],
+  projects: [{ projectId: 'rule-shelter', state: 'active', quantities: [] }],
   snapshotMetadata: { capturedAt: FIXTURE_CAPTURED_AT },
 }
 

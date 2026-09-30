@@ -18,23 +18,36 @@ import {
   stateWithItems,
 } from '../fixtures'
 
+const CAPTURED_AT = 1700000000000
+
 function row(analysis: StashAnalysis, itemId: string): ItemAnalysis {
   const found = analysis.items.find((entry) => entry.itemId === itemId)
   if (found === undefined) throw new Error(`expected row for ${itemId}`)
   return found
 }
 
-function stashHolding(itemId: string, quantity: number): PlayerState {
+function stashHolding(
+  itemId: string,
+  quantity: number,
+  questIds: readonly string[] = [],
+  projectIds: readonly string[] = []
+): PlayerState {
   return {
     profile: { playerId: 'player-1' },
     stash: {
       id: 'stash-1',
       items: [{ id: itemId, quantity }],
       capacity: { totalSlots: 10, usedSlots: 1 },
-      freshness: { capturedAt: 1700000000000 },
+      freshness: { capturedAt: CAPTURED_AT },
     },
-    snapshotMetadata: { capturedAt: 1700000000000 },
+    questProgress: questIds.map((questId) => ({ questId, state: 'active', quantities: [] })),
+    projects: projectIds.map((projectId) => ({ projectId, state: 'active', quantities: [] })),
+    snapshotMetadata: { capturedAt: CAPTURED_AT },
   }
+}
+
+function baseMetadata() {
+  return { sourceId: 'rules-fixture-data', datasetVersion: 'm5-fixture-1', capturedAt: CAPTURED_AT }
 }
 
 function freezeDeep(value: unknown): void {
@@ -60,44 +73,40 @@ describe('Rules engine — classification', () => {
 
   it('reserves an item required by one quest', () => {
     const questOnly: GameKnowledge = { ...knowledgeBase, workshops: [], projects: [] }
-    const analysis = analyzeStash(stashHolding('rule-wire', 5), questOnly)
+    const analysis = analyzeStash(stashHolding('rule-wire', 5, ['rule-quest']), questOnly)
     const wire = row(analysis, 'rule-wire')
     expect(wire.classification).toBe('RESERVE')
     expect(wire.required).toBe(2)
     expect(wire.reasons.map((reason) => reason.code)).toEqual(['REQUIRED_BY_QUEST'])
   })
 
-  it('reserves an item required by one workshop', () => {
-    const workshopOnly: GameKnowledge = { ...knowledgeBase, quests: [], projects: [] }
-    const analysis = analyzeStash(stashHolding('rule-bandage', 5), workshopOnly)
-    const bandage = row(analysis, 'rule-bandage')
-    expect(bandage.classification).toBe('RESERVE')
-    expect(bandage.required).toBe(3)
-    expect(bandage.reasons.map((reason) => reason.code)).toEqual(['REQUIRED_BY_WORKSHOP'])
-  })
-
   it('reserves an item required by one project', () => {
     const projectOnly: GameKnowledge = { ...knowledgeBase, quests: [], workshops: [] }
-    const analysis = analyzeStash(stashHolding('rule-bandage', 5), projectOnly)
+    const analysis = analyzeStash(stashHolding('rule-bandage', 5, [], ['rule-shelter']), projectOnly)
     const bandage = row(analysis, 'rule-bandage')
     expect(bandage.classification).toBe('RESERVE')
     expect(bandage.required).toBe(1)
     expect(bandage.reasons.map((reason) => reason.code)).toEqual(['REQUIRED_BY_PROJECT'])
   })
 
-  it('aggregates quest, workshop, and project contributions', () => {
-    const analysis = analyzeStash(stashHolding('rule-bandage', 9), knowledgeAllSources)
+  it('aggregates quest and project contributions while excluding workshops', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-bandage', 9, ['rule-quest-bandage'], ['rule-shelter']),
+      knowledgeAllSources
+    )
     const bandage = row(analysis, 'rule-bandage')
-    expect(bandage.required).toBe(6)
+    expect(bandage.required).toBe(3)
     expect(bandage.reasons.map((reason) => reason.code)).toEqual([
       'REQUIRED_BY_QUEST',
-      'REQUIRED_BY_WORKSHOP',
       'REQUIRED_BY_PROJECT',
     ])
   })
 
   it('aggregates multiple targets within one source', () => {
-    const analysis = analyzeStash(stashHolding('rule-wire', 9), knowledgeTwoQuests)
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 9, ['rule-quest-a', 'rule-quest-b']),
+      knowledgeTwoQuests
+    )
     const wire = row(analysis, 'rule-wire')
     expect(wire.required).toBe(7)
     expect(wire.classification).toBe('RESERVE')
@@ -119,28 +128,193 @@ describe('Rules engine — classification', () => {
         },
       ],
     }
-    const analysis = analyzeStash(stashHolding('rule-wire', 9), duplicated)
+    const analysis = analyzeStash(stashHolding('rule-wire', 9, ['rule-quest-dup']), duplicated)
     expect(row(analysis, 'rule-wire').required).toBe(4)
+  })
+})
+
+describe('Rules engine — requirement scoping', () => {
+  it('counts only the pursued quest, not every catalog quest', () => {
+    const knowledge: GameKnowledge = {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [
+        { id: 'quest-a', name: 'Quest A', requirements: [{ itemId: 'rule-wire', quantity: 2 }] },
+        { id: 'quest-b', name: 'Quest B', requirements: [{ itemId: 'rule-wire', quantity: 50 }] },
+      ],
+      workshops: [],
+      projects: [],
+      metadata: baseMetadata(),
+    }
+    const analysis = analyzeStash(stashHolding('rule-wire', 9, ['quest-a']), knowledge)
+    expect(row(analysis, 'rule-wire').required).toBe(2)
+  })
+
+  it('counts only the pursued project, not every catalog project', () => {
+    const knowledge: GameKnowledge = {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [],
+      workshops: [],
+      projects: [
+        { id: 'proj-a', name: 'Project A', requirements: [{ itemId: 'rule-wire', quantity: 2 }] },
+        { id: 'proj-b', name: 'Project B', requirements: [{ itemId: 'rule-wire', quantity: 50 }] },
+      ],
+      metadata: baseMetadata(),
+    }
+    const analysis = analyzeStash(stashHolding('rule-wire', 9, [], ['proj-a']), knowledge)
+    expect(row(analysis, 'rule-wire').required).toBe(2)
+  })
+
+  it('never counts workshop catalog entries, even on exact hideout match', () => {
+    const knowledge: GameKnowledge = {
+      items: [{ id: 'rule-wire', name: 'Rule Wire' }],
+      quests: [
+        { id: 'quest-a', name: 'Quest A', requirements: [{ itemId: 'rule-wire', quantity: 2 }] },
+      ],
+      workshops: [
+        { id: 'wx', name: 'Workshop X', requirements: [{ itemId: 'rule-wire', quantity: 40 }] },
+        { id: 'wy', name: 'Workshop Y', requirements: [{ itemId: 'rule-wire', quantity: 1 }] },
+      ],
+      projects: [],
+      metadata: baseMetadata(),
+    }
+    const state: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'rule-wire', quantity: 9 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: CAPTURED_AT },
+      },
+      questProgress: [{ questId: 'quest-a', state: 'active', quantities: [] }],
+      hideoutProgress: { hideoutId: 'wx', state: 'active', resources: [] },
+      snapshotMetadata: { capturedAt: CAPTURED_AT },
+    }
+    expect(row(analyzeStash(state, knowledge), 'rule-wire').required).toBe(2)
+  })
+
+  it('contributes zero quest requirements when questProgress is undefined', () => {
+    const state: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'rule-wire', quantity: 1 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: CAPTURED_AT },
+      },
+      snapshotMetadata: { capturedAt: CAPTURED_AT },
+    }
+    expect(row(analyzeStash(state, knowledgeBase), 'rule-wire').required).toBe(0)
+  })
+
+  it('ignores progress quantities when matching quests', () => {
+    const state: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'rule-wire', quantity: 5 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: CAPTURED_AT },
+      },
+      questProgress: [{ questId: 'rule-quest', state: 'active', quantities: [99] }],
+      snapshotMetadata: { capturedAt: CAPTURED_AT },
+    }
+    const questOnly: GameKnowledge = { ...knowledgeBase, workshops: [], projects: [] }
+    expect(row(analyzeStash(state, questOnly), 'rule-wire').required).toBe(2)
+  })
+
+  it('matches progression by ID without reading state strings', () => {
+    const state: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'rule-wire', quantity: 5 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: CAPTURED_AT },
+      },
+      questProgress: [{ questId: 'rule-quest', state: 'completed', quantities: [] }],
+      snapshotMetadata: { capturedAt: CAPTURED_AT },
+    }
+    const questOnly: GameKnowledge = { ...knowledgeBase, workshops: [], projects: [] }
+    const wire = row(analyzeStash(state, questOnly), 'rule-wire')
+    expect(wire.required).toBe(2)
+    expect(wire.classification).toBe('RESERVE')
+  })
+
+  it('reviews clean rows when a quest reference is unknown', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-bandage', 5, ['quest-ghost']),
+      knowledgeNoRequirements
+    )
+    const bandage = row(analysis, 'rule-bandage')
+    expect(bandage.classification).toBe('REVIEW')
+    expect(bandage.reasons.map((reason) => reason.code)).toEqual([
+      'NO_KNOWN_REQUIREMENT',
+      'INSUFFICIENT_DATA',
+    ])
+  })
+
+  it('reviews clean rows when a project reference is unknown', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-bandage', 5, [], ['project-ghost']),
+      knowledgeNoRequirements
+    )
+    const bandage = row(analysis, 'rule-bandage')
+    expect(bandage.classification).toBe('REVIEW')
+    expect(bandage.reasons.map((reason) => reason.code)).toEqual([
+      'NO_KNOWN_REQUIREMENT',
+      'INSUFFICIENT_DATA',
+    ])
+  })
+
+  it('leaves clean rows alone for unmatched hideout progress', () => {
+    const state: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'rule-bandage', quantity: 5 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: CAPTURED_AT },
+      },
+      hideoutProgress: { hideoutId: 'den-1', state: 'active', resources: [] },
+      snapshotMetadata: { capturedAt: CAPTURED_AT },
+    }
+    const bandage = row(analyzeStash(state, knowledgeNoRequirements), 'rule-bandage')
+    expect(bandage.classification).toBe('KEEP')
+    expect(bandage.reasons.map((reason) => reason.code)).toEqual(['NO_KNOWN_REQUIREMENT'])
+  })
+
+  it('reviews workshop-mentioned items instead of keeping them', () => {
+    const analysis = analyzeStash(stashHolding('rule-bandage', 5), knowledgeBase)
+    const bandage = row(analysis, 'rule-bandage')
+    expect(bandage.required).toBe(0)
+    expect(bandage.classification).toBe('REVIEW')
+    expect(bandage.reasons.map((reason) => reason.code)).toEqual(['INSUFFICIENT_DATA'])
   })
 })
 
 describe('Rules engine — quantity math', () => {
   it('exposes missing when owned is below required', () => {
-    const analysis = analyzeStash(stateWithItems, knowledgeBase)
-    const bandage = row(analysis, 'rule-bandage')
-    expect(bandage.owned).toBe(2)
-    expect(bandage.required).toBe(4)
-    expect(bandage.reserved).toBe(2)
-    expect(bandage.missing).toBe(2)
-    expect(bandage.surplus).toBe(0)
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 2, ['rule-quest-a', 'rule-quest-b']),
+      knowledgeTwoQuests
+    )
+    const wire = row(analysis, 'rule-wire')
+    expect(wire.owned).toBe(2)
+    expect(wire.required).toBe(7)
+    expect(wire.reserved).toBe(2)
+    expect(wire.missing).toBe(5)
+    expect(wire.surplus).toBe(0)
   })
 
   it('reports zero missing and surplus when owned equals required', () => {
-    const analysis = analyzeStash(stashHolding('rule-wire', 3), knowledgeBase)
+    const analysis = analyzeStash(
+      stashHolding('rule-wire', 2, ['rule-quest-a']),
+      knowledgeTwoQuests
+    )
     const wire = row(analysis, 'rule-wire')
-    expect(wire.owned).toBe(3)
-    expect(wire.required).toBe(3)
-    expect(wire.reserved).toBe(3)
+    expect(wire.owned).toBe(2)
+    expect(wire.required).toBe(2)
+    expect(wire.reserved).toBe(2)
     expect(wire.missing).toBe(0)
     expect(wire.surplus).toBe(0)
     expect(wire.classification).toBe('RESERVE')
@@ -150,10 +324,10 @@ describe('Rules engine — quantity math', () => {
     const analysis = analyzeStash(stateWithItems, knowledgeBase)
     const wire = row(analysis, 'rule-wire')
     expect(wire.owned).toBe(5)
-    expect(wire.required).toBe(3)
-    expect(wire.reserved).toBe(3)
+    expect(wire.required).toBe(2)
+    expect(wire.reserved).toBe(2)
     expect(wire.missing).toBe(0)
-    expect(wire.surplus).toBe(2)
+    expect(wire.surplus).toBe(3)
     expect(wire.classification).toBe('RESERVE')
   })
 
@@ -172,10 +346,10 @@ describe('Rules engine — quantity math', () => {
   })
 
   it('creates no rows for required items the player does not own', () => {
-    const analysis = analyzeStash(stashHolding('rule-wire', 1), knowledgeBase)
+    const analysis = analyzeStash(stashHolding('rule-wire', 1, ['rule-quest']), knowledgeBase)
     expect(analysis.items).toHaveLength(1)
     expect(analysis.items.map((entry) => entry.itemId)).toEqual(['rule-wire'])
-    expect(row(analysis, 'rule-wire').missing).toBe(2)
+    expect(row(analysis, 'rule-wire').missing).toBe(1)
   })
 })
 
@@ -215,11 +389,13 @@ describe('Rules engine — determinism and safety', () => {
     ])
   })
 
-  it('emits reasons in quest, workshop, project order', () => {
-    const analysis = analyzeStash(stashHolding('rule-bandage', 9), knowledgeAllSources)
+  it('emits reasons in quest, project order', () => {
+    const analysis = analyzeStash(
+      stashHolding('rule-bandage', 9, ['rule-quest-bandage'], ['rule-shelter']),
+      knowledgeAllSources
+    )
     expect(row(analysis, 'rule-bandage').reasons.map((reason) => reason.code)).toEqual([
       'REQUIRED_BY_QUEST',
-      'REQUIRED_BY_WORKSHOP',
       'REQUIRED_BY_PROJECT',
     ])
   })
@@ -242,7 +418,10 @@ describe('Rules engine — determinism and safety', () => {
 
   it('never emits SELL without explicit evidence', () => {
     for (const quantity of [0, 1, 5, 99]) {
-      const analysis = analyzeStash(stashHolding('rule-wire', quantity), knowledgeBase)
+      const analysis = analyzeStash(
+        stashHolding('rule-wire', quantity, ['rule-quest']),
+        knowledgeBase
+      )
       expect(row(analysis, 'rule-wire').classification).not.toBe('SELL')
     }
     const unknown = analyzeStash(stashHolding('rule-ghost', 99), knowledgeBase)
@@ -251,7 +430,10 @@ describe('Rules engine — determinism and safety', () => {
 
   it('never emits RECYCLE without explicit evidence', () => {
     for (const quantity of [0, 1, 5, 99]) {
-      const analysis = analyzeStash(stashHolding('rule-bandage', quantity), knowledgeBase)
+      const analysis = analyzeStash(
+        stashHolding('rule-bandage', quantity, [], ['rule-shelter']),
+        knowledgeBase
+      )
       expect(row(analysis, 'rule-bandage').classification).not.toBe('RECYCLE')
     }
     const unknown = analyzeStash(stashHolding('rule-ghost', 99), knowledgeBase)

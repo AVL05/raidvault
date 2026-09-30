@@ -10,27 +10,50 @@
  *
  * ```text
  * owned    = stash quantity
- * required = sum of every explicit quest, workshop, and project
- *            requirement contribution for the item, each counted once
+ * required = sum of explicit requirement contributions from the
+ *            player's current matched sources only (see scoping)
  * reserved = min(owned, required)
  * missing  = max(required - owned, 0)
  * surplus  = max(owned - reserved, 0)
  * ```
  *
- * Duplicate requirement contributions are summed, never silently
- * deduplicated: normalized GameKnowledge carries no identity rule that
- * would distinguish repeated entries, so each explicit entry counts.
+ * Requirement-source scoping (fail-safe by design):
+ *
+ * - GameKnowledge is a catalog, not player state. Catalog entries
+ *   contribute nothing unless the player's current progression
+ *   references them by exact ID.
+ * - Quests contribute only when questProgress holds the quest ID.
+ * - Projects contribute only when projects holds the project ID.
+ * - Progression state strings and progress quantities are never read:
+ *   matching is by identifier only, with no string heuristics.
+ * - Workshops cannot be scoped: no architecture or docs define a
+ *   hideout-to-workshop correspondence, so workshop requirements are
+ *   excluded from required entirely (never assumed active). Items
+ *   referenced by a workshop while otherwise requirement-free become
+ *   REVIEW instead of KEEP, since a KEEP verdict would be unfounded.
+ * - Progression entries referencing catalog IDs absent from
+ *   GameKnowledge mark requirement knowledge incomplete; rows that
+ *   would otherwise be KEEP become REVIEW.
+ *
+ * Duplicate requirement contributions inside matched sources are summed,
+ * never silently deduplicated: normalized GameKnowledge carries no
+ * identity rule that would distinguish repeated entries.
  *
  * Conservative classification: unknown items become REVIEW, required
  * items become RESERVE (surplus exposed separately, never reclassifying
- * the row), known items without requirements become KEEP. SELL and
- * RECYCLE exist in the result model but analyzeStash never emits them:
- * current inputs carry no deterministic economy evidence, and none is
- * invented to exercise those branches.
+ * the row), cleanly unrequired items become KEEP. SELL and RECYCLE exist
+ * in the result model but analyzeStash never emits them: current inputs
+ * carry no deterministic economy evidence, and none is invented to
+ * exercise those branches.
  */
 
 import type { PlayerState } from '@raidvault/domain'
-import type { GameKnowledge, ItemRequirement } from '@raidvault/game-data'
+import type {
+  GameKnowledge,
+  ItemRequirement,
+  ProjectRequirement,
+  QuestKnowledge,
+} from '@raidvault/game-data'
 
 // ---------------------------------------------------------------------------
 // Result model (small, readonly, serializable)
@@ -81,16 +104,6 @@ export interface StashAnalysis {
 // Requirement aggregation (factual only, no planning)
 // ---------------------------------------------------------------------------
 
-interface SourceContributions {
-  readonly quest: number
-  readonly workshop: number
-  readonly project: number
-}
-
-function emptyContributions(): { quest: number; workshop: number; project: number } {
-  return { quest: 0, workshop: 0, project: 0 }
-}
-
 function sumRequirements(
   requirements: readonly ItemRequirement[],
   itemId: string
@@ -104,21 +117,16 @@ function sumRequirements(
   return total
 }
 
-function collectContributions(
-  knowledge: GameKnowledge,
-  itemId: string
-): SourceContributions {
-  const contributions = emptyContributions()
-  for (const quest of knowledge.quests) {
-    contributions.quest += sumRequirements(quest.requirements, itemId)
+function indexTargetsById<Target extends { readonly id: string }>(
+  targets: readonly Target[]
+): Map<string, Target> {
+  const index = new Map<string, Target>()
+  for (const target of targets) {
+    if (!index.has(target.id)) {
+      index.set(target.id, target)
+    }
   }
-  for (const workshop of knowledge.workshops) {
-    contributions.workshop += sumRequirements(workshop.requirements, itemId)
-  }
-  for (const project of knowledge.projects) {
-    contributions.project += sumRequirements(project.requirements, itemId)
-  }
-  return contributions
+  return index
 }
 
 function isKnownItem(knowledge: GameKnowledge, itemId: string): boolean {
@@ -128,6 +136,16 @@ function isKnownItem(knowledge: GameKnowledge, itemId: string): boolean {
     }
   }
   return false
+}
+
+function collectWorkshopMentions(knowledge: GameKnowledge): ReadonlySet<string> {
+  const mentioned = new Set<string>()
+  for (const workshop of knowledge.workshops) {
+    for (const requirement of workshop.requirements) {
+      mentioned.add(requirement.itemId)
+    }
+  }
+  return mentioned
 }
 
 // ---------------------------------------------------------------------------
@@ -154,16 +172,34 @@ function analyzeUnknownItem(itemId: string, owned: number): ItemAnalysis {
   }
 }
 
+interface ScopedContributions {
+  readonly quest: number
+  readonly project: number
+}
+
 function analyzeKnownItem(
   itemId: string,
   owned: number,
-  contributions: SourceContributions
+  contributions: ScopedContributions,
+  workshopMentioned: boolean,
+  progressionGaps: boolean
 ): ItemAnalysis {
-  const required = contributions.quest + contributions.workshop + contributions.project
+  const required = contributions.quest + contributions.project
   const reserved = Math.min(owned, required)
   const missing = Math.max(required - owned, 0)
   const surplus = Math.max(owned - reserved, 0)
-  if (required === 0) {
+  if (required > 0) {
+    const reasons: RuleReason[] = []
+    if (contributions.quest > 0) {
+      reasons.push(
+        reason('REQUIRED_BY_QUEST', `Required by quests: quantity ${contributions.quest}`)
+      )
+    }
+    if (contributions.project > 0) {
+      reasons.push(
+        reason('REQUIRED_BY_PROJECT', `Required by projects: quantity ${contributions.project}`)
+      )
+    }
     return {
       itemId,
       owned,
@@ -171,25 +207,44 @@ function analyzeKnownItem(
       reserved,
       missing,
       surplus,
-      classification: 'KEEP',
-      reasons: [reason('NO_KNOWN_REQUIREMENT', `No known requirement references item '${itemId}'`)],
+      classification: 'RESERVE',
+      reasons,
     }
   }
-  const reasons: RuleReason[] = []
-  if (contributions.quest > 0) {
-    reasons.push(
-      reason('REQUIRED_BY_QUEST', `Required by quests: quantity ${contributions.quest}`)
-    )
+  if (workshopMentioned) {
+    return {
+      itemId,
+      owned,
+      required,
+      reserved,
+      missing,
+      surplus,
+      classification: 'REVIEW',
+      reasons: [
+        reason(
+          'INSUFFICIENT_DATA',
+          `Workshop requirements reference item '${itemId}' but cannot be scoped to current progression`
+        ),
+      ],
+    }
   }
-  if (contributions.workshop > 0) {
-    reasons.push(
-      reason('REQUIRED_BY_WORKSHOP', `Required by workshops: quantity ${contributions.workshop}`)
-    )
-  }
-  if (contributions.project > 0) {
-    reasons.push(
-      reason('REQUIRED_BY_PROJECT', `Required by projects: quantity ${contributions.project}`)
-    )
+  if (progressionGaps) {
+    return {
+      itemId,
+      owned,
+      required,
+      reserved,
+      missing,
+      surplus,
+      classification: 'REVIEW',
+      reasons: [
+        reason('NO_KNOWN_REQUIREMENT', `No known requirement references item '${itemId}'`),
+        reason(
+          'INSUFFICIENT_DATA',
+          'Player progression references catalog entries absent from game knowledge'
+        ),
+      ],
+    }
   }
   return {
     itemId,
@@ -198,8 +253,8 @@ function analyzeKnownItem(
     reserved,
     missing,
     surplus,
-    classification: 'RESERVE',
-    reasons,
+    classification: 'KEEP',
+    reasons: [reason('NO_KNOWN_REQUIREMENT', `No known requirement references item '${itemId}'`)],
   }
 }
 
@@ -208,9 +263,10 @@ function analyzeKnownItem(
 // ---------------------------------------------------------------------------
 
 /**
- * Analyze every stash item against game knowledge. Rows follow stash
- * order; items the player does not own never produce rows. Inputs are
- * trusted as validated upstream and are never mutated.
+ * Analyze every stash item against game knowledge, counting only
+ * requirements from the player's current matched progression. Rows
+ * follow stash order; items the player does not own never produce rows.
+ * Inputs are trusted as validated upstream and are never mutated.
  */
 export function analyzeStash(
   playerState: PlayerState,
@@ -219,15 +275,57 @@ export function analyzeStash(
   if (playerState.stash === undefined) {
     return { items: [], hasStash: false }
   }
+  const questIndex = indexTargetsById(gameKnowledge.quests)
+  const projectIndex = indexTargetsById(gameKnowledge.projects)
+  const workshopMentioned = collectWorkshopMentions(gameKnowledge)
+
+  const activeQuests: QuestKnowledge[] = []
+  let progressionGaps = false
+  if (playerState.questProgress !== undefined) {
+    for (const progress of playerState.questProgress) {
+      const quest = questIndex.get(progress.questId)
+      if (quest === undefined) {
+        progressionGaps = true
+      } else {
+        activeQuests.push(quest)
+      }
+    }
+  }
+  const activeProjects: ProjectRequirement[] = []
+  if (playerState.projects !== undefined) {
+    for (const progress of playerState.projects) {
+      const project = projectIndex.get(progress.projectId)
+      if (project === undefined) {
+        progressionGaps = true
+      } else {
+        activeProjects.push(project)
+      }
+    }
+  }
+
   const items: ItemAnalysis[] = []
   for (const entry of playerState.stash.items) {
-    if (isKnownItem(gameKnowledge, entry.id)) {
-      items.push(
-        analyzeKnownItem(entry.id, entry.quantity, collectContributions(gameKnowledge, entry.id))
-      )
-    } else {
+    if (!isKnownItem(gameKnowledge, entry.id)) {
       items.push(analyzeUnknownItem(entry.id, entry.quantity))
+      continue
     }
+    let questTotal = 0
+    for (const quest of activeQuests) {
+      questTotal += sumRequirements(quest.requirements, entry.id)
+    }
+    let projectTotal = 0
+    for (const project of activeProjects) {
+      projectTotal += sumRequirements(project.requirements, entry.id)
+    }
+    items.push(
+      analyzeKnownItem(
+        entry.id,
+        entry.quantity,
+        { quest: questTotal, project: projectTotal },
+        workshopMentioned.has(entry.id),
+        progressionGaps
+      )
+    )
   }
   return { items, hasStash: true }
 }
