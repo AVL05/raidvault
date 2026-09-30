@@ -1,24 +1,71 @@
-export default function Home() {
+import { createBundledGameDataSource, loadGameKnowledge } from '@raidvault/game-data'
+import {
+  createMockPlayerProvider,
+  createPlayerStateSnapshotCache,
+} from '@raidvault/providers'
+import { StashBrowser } from '../stash/stash-browser'
+import { UnavailablePanel } from '../stash/unavailable-panel'
+import {
+  buildStashRows,
+  describeSnapshot,
+  listCategories,
+  summarizeStash,
+} from '../stash/view-model'
+import {
+  MOCK_GAME_DATA_PAYLOAD,
+  MOCK_GAME_DATA_SOURCE_ID,
+  MOCK_PLAYER_PAYLOAD,
+  MOCK_PROVIDER_ID,
+} from '../stash/mock-data'
+
+/**
+ * M4 stash screen. Loads the deterministic mock provider through the
+ * last-valid snapshot cache plus bundled game knowledge, then renders
+ * validated data only. Every failure branch is explicit.
+ */
+export default async function Home() {
+  const provider = createMockPlayerProvider(MOCK_PROVIDER_ID, MOCK_PLAYER_PAYLOAD)
+  const cache = createPlayerStateSnapshotCache(provider)
+  const snapshotResult = await cache.refresh()
+  if (snapshotResult.success === false) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-8">
+        <div className="mx-auto max-w-5xl">
+          <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
+          <UnavailablePanel title="Stash unavailable" detail={snapshotResult.error.message} />
+        </div>
+      </main>
+    )
+  }
+
+  const knowledgeResult = await loadGameKnowledge(
+    createBundledGameDataSource(MOCK_GAME_DATA_SOURCE_ID, MOCK_GAME_DATA_PAYLOAD)
+  )
+  if (knowledgeResult.success === false) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-8">
+        <div className="mx-auto max-w-5xl">
+          <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
+          <UnavailablePanel title="Game data unavailable" detail={knowledgeResult.error.message} />
+        </div>
+      </main>
+    )
+  }
+
+  const snapshot = snapshotResult.value
+  const rows = buildStashRows(snapshot.state, knowledgeResult.value)
+
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
-      <h1 className="mb-6 text-3xl font-bold text-gray-900">
-        RaidVault Development Screen
-      </h1>
-      <p className="mb-8 text-lg text-gray-600">
-        M0 — Foundation. This is a minimal development screen.
-      </p>
-      <div className="bg-white p-6 rounded-lg shadow-md max-w-md w-full">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">Development Status</h2>
-        <ul className="space-y-2 text-sm text-gray-600">
-          <li>✓ pnpm monorepo initialized</li>
-          <li>✓ Next.js App Router configured</li>
-          <li>✓ Tailwind CSS configured</li>
-          <li>✓ ESLint configured</li>
-          <li>✓ TypeScript strict mode</li>
-          <li>✓ No game integration</li>
-          <li>✓ No AI/Providers/Rules Engine</li>
-        </ul>
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
+      <div className="mx-auto max-w-5xl">
+        <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
+        <StashBrowser
+          rows={rows}
+          categories={listCategories(rows)}
+          summary={summarizeStash(snapshot.state)}
+          status={describeSnapshot(snapshot)}
+        />
       </div>
     </main>
-  );
+  )
 }

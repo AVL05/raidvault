@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "RaidVault",
-  description: "M0 — Foundation development screen",
+  title: "RaidVault — Stash",
+  description: "Local-first ARC Raiders stash companion",
 };
 
 export default function RootLayout({
