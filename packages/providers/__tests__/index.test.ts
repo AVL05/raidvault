@@ -45,6 +45,27 @@ function mockUnavailable(): PlayerDataProvider {
   return createMockPlayerProvider(FIXTURE_PROVIDER_ID, validMockPayload, 'unavailable')
 }
 
+// Test-local two-stage provider: first load delegates to `first`, every
+// later load delegates to `second`. Composes only the public contract so a
+// success-then-failure sequence is observable through one provider identity.
+function createSequencedProvider(
+  providerId: string,
+  first: PlayerDataProvider,
+  second: PlayerDataProvider
+): PlayerDataProvider {
+  let calls = 0
+  return {
+    providerId,
+    loadPlayerState(): Promise<ProviderResult<PlayerState>> {
+      calls += 1
+      if (calls === 1) {
+        return first.loadPlayerState()
+      }
+      return second.loadPlayerState()
+    },
+  }
+}
+
 // ---- Mock provider loads ----
 
 describe('Providers — mock loads', () => {
@@ -171,8 +192,8 @@ describe('Providers — validation', () => {
 
 describe('Providers — snapshot cache', () => {
   it('stores a valid load as the last-valid snapshot', async () => {
-    const cache = createPlayerStateSnapshotCache()
-    const refreshed = await cache.refresh(mockOk(validMockPayload))
+    const cache = createPlayerStateSnapshotCache(mockOk(validMockPayload))
+    const refreshed = await cache.refresh()
     assertSuccess(refreshed)
     expect(refreshed.value.stale).toBe(false)
     expect(refreshed.value.providerId).toBe(FIXTURE_PROVIDER_ID)
@@ -180,24 +201,45 @@ describe('Providers — snapshot cache', () => {
     expect(refreshed.value.state.profile.playerId).toBe('player-1')
     const current = cache.current()
     assertSuccess(current)
-    expect(current.value.stale).toBe(true)
+    expect(current.value.stale).toBe(false)
     expect(current.value.state).toEqual(refreshed.value.state)
   })
 
-  it('returns the stale fallback after a later provider failure', async () => {
-    const cache = createPlayerStateSnapshotCache()
-    const fresh = await cache.refresh(mockOk(validMockPayload))
+  it('returns the stale fallback after the bound provider becomes unavailable', async () => {
+    const provider = createSequencedProvider(
+      FIXTURE_PROVIDER_ID,
+      mockOk(validMockPayload),
+      mockUnavailable()
+    )
+    const cache = createPlayerStateSnapshotCache(provider)
+    const fresh = await cache.refresh()
     assertSuccess(fresh)
-    const fallback = await cache.refresh(mockUnavailable())
+    expect(fresh.value.stale).toBe(false)
+    const fallback = await cache.refresh()
     assertSuccess(fallback)
     expect(fallback.value.stale).toBe(true)
     expect(fallback.value.state).toEqual(fresh.value.state)
     expect(fallback.value.providerId).toBe(FIXTURE_PROVIDER_ID)
   })
 
+  it('never returns one provider snapshot as another provider fallback', async () => {
+    const cacheA = createPlayerStateSnapshotCache(mockOk(validMockPayload))
+    const stored = await cacheA.refresh()
+    assertSuccess(stored)
+    const cacheB = createPlayerStateSnapshotCache(
+      createMockPlayerProvider('other-provider', validMockPayload, 'unavailable')
+    )
+    const result = await cacheB.refresh()
+    assertFailure(result)
+    expect(result.error.kind).toBe('unavailable')
+    const current = cacheB.current()
+    assertFailure(current)
+    expect(current.error.kind).toBe('snapshot-unavailable')
+  })
+
   it('returns unavailable when the provider fails before the first success', async () => {
-    const cache = createPlayerStateSnapshotCache()
-    const result = await cache.refresh(mockUnavailable())
+    const cache = createPlayerStateSnapshotCache(mockUnavailable())
+    const result = await cache.refresh()
     assertFailure(result)
     expect(result.error.kind).toBe('unavailable')
     const current = cache.current()
@@ -205,16 +247,22 @@ describe('Providers — snapshot cache', () => {
     expect(current.error.kind).toBe('snapshot-unavailable')
   })
 
-  it('never replaces last-valid with an invalid payload', async () => {
-    const cache = createPlayerStateSnapshotCache()
-    const fresh = await cache.refresh(mockOk(validMockPayload))
+  it('returns validation failures explicitly without touching the cache', async () => {
+    const provider = createSequencedProvider(
+      FIXTURE_PROVIDER_ID,
+      mockOk(validMockPayload),
+      mockOk(negativeQuantityPayload)
+    )
+    const cache = createPlayerStateSnapshotCache(provider)
+    const fresh = await cache.refresh()
     assertSuccess(fresh)
-    const fallback = await cache.refresh(mockOk(negativeQuantityPayload))
-    assertSuccess(fallback)
-    expect(fallback.value.stale).toBe(true)
-    expect(fallback.value.state).toEqual(fresh.value.state)
+    const rejected = await cache.refresh()
+    assertFailure(rejected)
+    expect(rejected.error.kind).toBe('normalization-error')
+    expect(rejected.error.message).toContain('invalid quantity')
     const current = cache.current()
     assertSuccess(current)
+    expect(current.value.stale).toBe(false)
     expect(current.value.state).toEqual(fresh.value.state)
     if (current.value.state.stash === undefined) throw new Error('expected stash')
     expect(current.value.state.stash.items).toHaveLength(2)

@@ -133,45 +133,46 @@ export interface PlayerStateSnapshot {
 }
 
 /**
- * Minimal in-memory last-valid snapshot cache. Stores only normalized,
- * validated PlayerState values, never raw provider payloads.
+ * Minimal in-memory last-valid snapshot cache bound to one provider. The
+ * binding makes cross-provider fallback structurally impossible: refresh
+ * operates only for the bound provider, and every stored snapshot carries
+ * that same providerId. Stores only normalized, validated PlayerState
+ * values, never raw provider payloads.
  */
 export interface PlayerStateSnapshotCache {
   /**
-   * Load through the provider and store the validated state on success.
-   * On provider failure with a stored snapshot, return it marked stale
-   * without overwriting it. With an empty cache, return the original
-   * failure explicitly.
+   * Load through the bound provider and store the validated state on
+   * success. When the bound provider is unavailable and a snapshot is
+   * stored, return it marked stale without overwriting it. Validation and
+   * normalization failures are always returned explicitly and never
+   * converted into fallback reads. With an empty cache, return the
+   * original failure explicitly.
    */
-  refresh(provider: PlayerDataProvider): Promise<ProviderResult<PlayerStateSnapshot>>
+  refresh(): Promise<ProviderResult<PlayerStateSnapshot>>
   /**
-   * Return the last validated snapshot marked stale, or an explicit
+   * Return the last validated snapshot exactly as stored, or an explicit
    * unavailable result when nothing was ever stored.
    */
   current(): ProviderResult<PlayerStateSnapshot>
 }
 
-/** Create an empty in-memory snapshot cache. No persistence involved. */
-export function createPlayerStateSnapshotCache(): PlayerStateSnapshotCache {
+/**
+ * Create an empty in-memory snapshot cache bound to one provider.
+ * No persistence involved.
+ */
+export function createPlayerStateSnapshotCache(
+  provider: PlayerDataProvider
+): PlayerStateSnapshotCache {
   let stored: PlayerStateSnapshot | undefined = undefined
 
-  function markStale(snapshot: PlayerStateSnapshot): PlayerStateSnapshot {
-    return {
-      state: snapshot.state,
-      providerId: snapshot.providerId,
-      fetchedAt: snapshot.fetchedAt,
-      stale: true,
-    }
-  }
-
   return {
-    refresh(provider: PlayerDataProvider): Promise<ProviderResult<PlayerStateSnapshot>> {
+    refresh(): Promise<ProviderResult<PlayerStateSnapshot>> {
       return provider.loadPlayerState().then((loaded) => {
         if (loaded.success === false) {
-          if (stored === undefined) {
-            return { success: false, error: loaded.error }
+          if (loaded.error.kind === 'unavailable' && stored !== undefined) {
+            return { success: true, value: { ...stored, stale: true } }
           }
-          return { success: true, value: markStale(stored) }
+          return { success: false, error: loaded.error }
         }
         stored = {
           state: loaded.value,
@@ -186,7 +187,7 @@ export function createPlayerStateSnapshotCache(): PlayerStateSnapshotCache {
       if (stored === undefined) {
         return fail('snapshot-unavailable', 'snapshot unavailable: no validated snapshot stored')
       }
-      return { success: true, value: markStale(stored) }
+      return { success: true, value: stored }
     },
   }
 }
