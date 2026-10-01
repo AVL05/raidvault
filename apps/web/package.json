@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-pwa.mjs prepare && next build && node scripts/build-pwa.mjs && node scripts/check-performance.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run"

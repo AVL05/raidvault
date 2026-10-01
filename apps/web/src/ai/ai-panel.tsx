@@ -41,6 +41,7 @@ function ControlButton({
   readonly onClick?: () => void
 }) {
   return (
+    <span className="inline-flex flex-col items-start gap-1">
     <button
       type="button"
       disabled={disabled}
@@ -50,6 +51,8 @@ function ControlButton({
     >
       {label}
     </button>
+    {disabled && reason !== undefined && <span className="text-xs text-gray-700">{reason}</span>}
+    </span>
   )
 }
 
@@ -71,7 +74,7 @@ export function AiStatusView({
       <dl className="space-y-2 text-sm">
         <div className="flex justify-between gap-4">
           <dt className="font-medium text-gray-500">WebGPU</dt>
-          <dd className="text-right text-gray-900">
+          <dd role="status" className="text-right text-gray-900">
             {capabilities === undefined
               ? 'Checking WebGPU support…'
               : capabilities.supported

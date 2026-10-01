@@ -11,6 +11,7 @@ export function UnavailablePanel({
 }) {
   return (
     <section
+      role="alert"
       aria-label={title}
       className="rounded-lg border border-amber-300 bg-amber-50 p-6"
     >
