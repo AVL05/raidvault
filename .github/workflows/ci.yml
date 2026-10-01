@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3
+        with:
+          version: 12.6.0
+          runtime: node@24.18.0
+          install: false
+          cache: true
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  bridge:
+    name: Bridge
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: apps/bridge
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy --no-self-update
+      - run: cargo fmt --check
+      - run: cargo check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test

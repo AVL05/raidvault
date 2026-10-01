@@ -101,3 +101,11 @@ it is not a modal and adds no focus trap.
 Browser eviction, restricted APIs, unsupported service workers, and install/update
 failure can remove offline capability; the online application remains available.
 Cache deletion does not claim to erase immutable bundled game knowledge or models.
+
+## Release / deployment verification
+
+Public PWA behavior is not considered verified until the production HTTPS
+matrix in [RELEASE.md](./RELEASE.md) passes on the owner-selected host.
+`public/sw.js` is generated after Next builds; the host must package that
+generated file and preserve the expected shell/asset bytes and worker headers.
+Local `next start` verification alone does not establish hosted compatibility.

@@ -14,6 +14,28 @@ Safety and correctness take priority over feature velocity.
 4. Confirm the requested milestone/scope.
 5. Check relevant ADRs.
 
+## Local setup
+
+Use Node **24.18.0** and pnpm **12.6.0**, as recorded in the root manifest.
+Install the exact pnpm version with a supported local installation method;
+do not assume Corepack is bundled with Node. CI installs pnpm/Node explicitly.
+
+From the repository root:
+
+```text
+pnpm install --frozen-lockfile
+pnpm -C apps/web dev
+```
+
+Bridge requires rustup and Rust **1.98.0**, with rustfmt/clippy pinned in
+`apps/bridge/rust-toolchain.toml`. It is optional for the demo web application;
+there is no browser-to-Bridge integration. Run it separately with:
+
+```text
+cd apps/bridge
+cargo run
+```
+
 ## Branches
 
 Prefer short-lived branches with descriptive names, for example:
@@ -89,17 +111,21 @@ High-risk areas include:
 
 ## Quality gates
 
-Once the relevant toolchain exists, run applicable checks before completion.
+From the repository root, run the same checks as the Web CI job:
 
-Expected frontend/package categories:
+```text
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
 
-- formatting;
-- lint;
-- typecheck;
-- unit/integration tests;
-- production build.
+Use `pnpm -C apps/web start` to inspect the production build. Bare `next build`
+omits post-build worker generation and budgets; development does not register
+the worker. See [PWA.md](./docs/PWA.md).
 
-Expected Rust categories:
+From `apps/bridge`, run the same checks as the Bridge CI job:
 
 ```text
 cargo fmt --check
@@ -109,6 +135,10 @@ cargo test
 ```
 
 Do not disable checks simply to get green output.
+
+Before release, also run `git diff --check` and inspect tracked/untracked changes.
+Local validation does not prove hosted CI or public HTTPS behavior; publication,
+licensing and hosting decisions follow [RELEASE.md](./docs/RELEASE.md).
 
 ## Tests
 
