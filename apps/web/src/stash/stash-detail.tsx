@@ -1,38 +1,77 @@
-import type { StashRow } from './view-model'
+import type { EnrichedStashRow } from './analysis-model'
+import { ClassificationBadge, SectionLabel } from '../ui/vault'
 
 /**
- * Presentational item detail. Shows the stable ID always; name and
- * category only when GameKnowledge provided them. Never invents data.
+ * Presentational item inspector. Shows stable ID always, authoritative
+ * deterministic facts, and structured reasons. Never invents data.
  */
-export function StashDetail({ row }: { readonly row: StashRow | null }) {
+export function StashDetail({ row }: { readonly row: EnrichedStashRow | null }) {
   if (row === null) {
-    return <p className="text-sm text-gray-500">Select an item to see details.</p>
+    return (
+      <section
+        aria-label="Item details"
+        className="rounded-sm border border-vault-line bg-vault-surface p-4"
+      >
+        <SectionLabel>Item inspector</SectionLabel>
+        <p className="mt-2 text-sm text-vault-muted">Select an item to see deterministic facts.</p>
+      </section>
+    )
   }
   return (
-    <section aria-label="Item details" aria-live="polite" className="rounded-lg bg-white p-4 shadow">
-      <h2 className="mb-3 text-lg font-semibold text-gray-900">Item details</h2>
-      <dl className="space-y-2 text-sm">
+    <section
+      aria-label="Item details"
+      aria-live="polite"
+      className="rounded-sm border border-vault-line bg-vault-surface p-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionLabel>Item inspector</SectionLabel>
+        <ClassificationBadge value={row.classification} />
+      </div>
+      <h2 className="mt-2 truncate text-lg font-bold text-vault-text">
+        {row.displayName ?? row.itemId}
+      </h2>
+      <p className="truncate font-mono text-[11px] text-vault-muted">ID: {row.itemId}</p>
+      <dl className="mt-3 space-y-2 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">ID</dt>
-          <dd className="text-right font-mono text-gray-900">{row.itemId}</dd>
+          <dt className="text-vault-muted">Quantity owned</dt>
+          <dd className="font-mono text-vault-text">{row.quantity}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Name</dt>
-          <dd className="text-right text-gray-900">{row.displayName ?? 'Unknown — showing ID'}</dd>
+          <dt className="text-vault-muted">Category</dt>
+          <dd className="text-vault-text">{row.category ?? 'Unknown'}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Quantity owned</dt>
-          <dd className="text-right text-gray-900">{row.quantity}</dd>
+          <dt className="text-vault-muted">Game data</dt>
+          <dd className="text-vault-text">{row.metadataKnown ? 'Known' : 'Unknown'}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Category</dt>
-          <dd className="text-right text-gray-900">{row.category ?? 'Unknown'}</dd>
+          <dt className="text-vault-muted">Required</dt>
+          <dd className="font-mono text-vault-text">{row.required}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Game data</dt>
-          <dd className="text-right text-gray-900">{row.metadataKnown ? 'Known' : 'Unknown'}</dd>
+          <dt className="text-vault-muted">Reserved</dt>
+          <dd className="font-mono text-vault-text">{row.reserved}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-vault-muted">Missing</dt>
+          <dd className="font-mono text-vault-text">{row.missing}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-vault-muted">Surplus</dt>
+          <dd className="font-mono text-vault-text">{row.surplus}</dd>
         </div>
       </dl>
+      <div className="mt-3 border-t border-vault-line pt-3">
+        <SectionLabel>Deterministic reasons</SectionLabel>
+        <ul className="mt-2 space-y-1.5">
+          {row.reasons.map((reason) => (
+            <li key={`${reason.code}:${reason.message}`} className="text-xs leading-relaxed">
+              <span className="font-mono font-bold text-vault-amber">{reason.code}</span>
+              <span className="block text-vault-muted">{reason.message}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   )
 }
