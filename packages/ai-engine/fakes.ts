@@ -8,6 +8,8 @@
 
 import type {
   AiCapabilities,
+  AiGenerationRequest,
+  AiGenerationResult,
   BridgeFetch,
   BridgeFetchResponse,
   GamingModeSource,
@@ -21,6 +23,7 @@ import type {
   ModelArtifactStore,
   ModelDescriptor,
   StorageReport,
+  TextGenerationSession,
 } from './index'
 
 /** Synthetic descriptor shared by lifecycle tests. No production model. */
@@ -276,4 +279,40 @@ export function hangingFetch(): BridgeFetch {
 /** Bridge fetch double that always rejects, for failure tests. */
 export function failingFetch(): BridgeFetch {
   return () => Promise.reject(new Error('network down'))
+}
+
+/** Deterministic generation-session double with scripted outcomes. */
+export class FakeTextGenerationSession implements TextGenerationSession {
+  public generateCalls: AiGenerationRequest[] = []
+  public cancelCalls = 0
+  public scriptedText = 'Fake model response.'
+  public generateError: Error | undefined = undefined
+  public holdGeneration = false
+  private gated: Array<() => void> = []
+
+  async generate(request: AiGenerationRequest): Promise<AiGenerationResult> {
+    this.generateCalls.push(request)
+    if (this.generateError !== undefined) {
+      throw this.generateError
+    }
+    if (this.holdGeneration) {
+      await new Promise<void>((resolve) => {
+        this.gated.push(resolve)
+      })
+    }
+    return { text: this.scriptedText }
+  }
+
+  /** Resolve every held generation completion in order. */
+  releaseGeneration(): void {
+    const pending = this.gated
+    this.gated = []
+    for (const resolve of pending) {
+      resolve()
+    }
+  }
+
+  async cancel(): Promise<void> {
+    this.cancelCalls += 1
+  }
 }

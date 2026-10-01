@@ -3,9 +3,11 @@ import {
   createMockPlayerProvider,
   createPlayerStateSnapshotCache,
 } from '@raidvault/providers'
-import { buildPlanningSnapshot } from '@raidvault/rules-engine'
+import { analyzeStash, buildPlanningSnapshot } from '@raidvault/rules-engine'
+import { buildVerifiedAiContext } from '@raidvault/ai-engine'
 import { AiEnginePanel } from '../ai/ai-panel'
 import { StashBrowser } from '../stash/stash-browser'
+import { ArcAiChat } from '../arc-ai/arc-ai-chat'
 import { PlanningSection } from '../stash/planning-section'
 import { UnavailablePanel } from '../stash/unavailable-panel'
 import {
@@ -59,6 +61,14 @@ export default async function Home() {
   const knowledge = knowledgeResult.value
   const rows = buildStashRows(snapshot.state, knowledge)
   const planning = buildPlanningSnapshot(snapshot.state, knowledge)
+  const aiContext = buildVerifiedAiContext({
+    playerState: snapshot.state,
+    gameKnowledge: knowledge,
+    analysis: analyzeStash(snapshot.state, knowledge),
+    planning,
+    providerId: snapshot.providerId,
+    stale: snapshot.stale,
+  })
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
@@ -71,6 +81,15 @@ export default async function Home() {
           status={describeSnapshot(snapshot)}
         />
         <PlanningSection planning={planning} />
+        <section aria-labelledby="arc-ai-heading" className="mt-8">
+          <h2 id="arc-ai-heading" className="mb-1 text-xl font-bold text-gray-900">
+            ARC AI
+          </h2>
+          <p className="mb-4 text-sm text-gray-600">
+            Local assistant over verified facts. No production model is configured in this build.
+          </p>
+          <ArcAiChat initialContext={aiContext} />
+        </section>
         <section aria-labelledby="ai-heading" className="mt-8">
           <h2 id="ai-heading" className="mb-1 text-xl font-bold text-gray-900">
             Local AI
