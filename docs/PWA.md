@@ -102,6 +102,23 @@ Browser eviction, restricted APIs, unsupported service workers, and install/upda
 failure can remove offline capability; the online application remains available.
 Cache deletion does not claim to erase immutable bundled game knowledge or models.
 
+## Hosting verification
+
+First candidate host: Vercel.
+
+- Root Directory: `apps/web`.
+- Full `pnpm run build` must execute; bare `next build` is not valid.
+- Post-build `public/sw.js` packaging is expected from inspected Vercel
+  adapter behavior but remains unverified until hosted test.
+- Exact hosted bytes and response headers are authoritative.
+- No custom domain for first verification.
+- Different origins have independent IndexedDB/Cache Storage.
+- Toolbar/content injection should remain disabled for verification.
+- Protected previews are unsuitable for normal public precache validation
+  unless explicitly made accessible.
+
+See [RELEASE.md](./RELEASE.md) for the full hosted verification matrix.
+
 ## Release / deployment verification
 
 Public PWA behavior is not considered verified until the production HTTPS
