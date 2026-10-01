@@ -70,18 +70,6 @@ export interface LoadedModelSession {
   dispose(): Promise<void>
 }
 
-/**
- * Owned model session returned by a successful runtime load. Exactly
- * one load operation owns each session: stale completions dispose only
- * their own session, so cleanup can never tear down a newer load.
- * Implementations must release partial acquisitions before rejecting
- * load(), so a failed load never leaves an owned session behind.
- */
-export interface LoadedModelSession {
-  unload(): Promise<void>
-  dispose(): Promise<void>
-}
-
 /** Cached model artifact storage. Never browser localStorage. */
 export interface ModelArtifactStore {
   isInstalled(descriptor: ModelDescriptor): Promise<boolean>
@@ -711,3 +699,52 @@ export function describeAiControls(
     refresh: { disabled: false, reason: undefined },
   }
 }
+
+// ---------------------------------------------------------------------------
+// M9 ARC AI public surface (implemented in ./arc-ai)
+// ---------------------------------------------------------------------------
+
+export {
+  answerFactualQuestion,
+  buildGenerationRequest,
+  buildVerifiedAiContext,
+  createArcAiController,
+  createArcAiTools,
+  fingerprintVerifiedContext,
+  ARC_SYSTEM_CONTRACT,
+  CONTEXT_SCHEMA_VERSION,
+  MAX_CATALOG_ENTRIES,
+  MAX_CHAT_MESSAGES,
+  MAX_CONTEXT_INCOMPLETE_REFERENCES,
+  MAX_CONTEXT_ITEMS,
+  MAX_CONTEXT_MISSING_ITEMS,
+  MAX_CONTEXT_PRIORITIES,
+  MAX_CONTEXT_TARGETS,
+  MAX_MESSAGE_CHARS,
+  MAX_OUTPUT_CHARS,
+  MAX_SEARCH_RESULTS,
+  MODEL_UNAVAILABLE_MESSAGE,
+  UNKNOWN_FACT_MESSAGE,
+} from './arc-ai'
+export type {
+  AiFactProvenance,
+  AiGenerationRequest,
+  AiGenerationResult,
+  AiItemFact,
+  AiKnowledgeState,
+  AiMessage,
+  ArcAiController,
+  ArcAiControllerDeps,
+  ArcAiSnapshot,
+  ArcAiStatus,
+  ArcAiTools,
+  CatalogEntry,
+  FactualAnswer,
+  GameKnowledgeSearchResult,
+  IncompleteReference,
+  PlayerSummaryView,
+  StashSummaryFact,
+  TextGenerationSession,
+  VerifiedAiContext,
+  VerifiedAiFact,
+} from './arc-ai'

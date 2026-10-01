@@ -9,5 +9,10 @@
       "types": "./index.ts",
       "default": "./index.ts"
     }
+  },
+  "dependencies": {
+    "@raidvault/domain": "workspace:*",
+    "@raidvault/game-data": "workspace:*",
+    "@raidvault/rules-engine": "workspace:*"
   }
 }
