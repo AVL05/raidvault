@@ -1,6 +1,6 @@
 /**
- * Explicit empty/error panel for data failures. Used for unavailable
- * provider snapshots and game-data load failures alike.
+ * Explicit empty/error panel for data failures. Tactical dark treatment;
+ * destructive meaning carried by text + border, never color alone.
  */
 export function UnavailablePanel({
   title,
@@ -13,10 +13,13 @@ export function UnavailablePanel({
     <section
       role="alert"
       aria-label={title}
-      className="rounded-lg border border-amber-300 bg-amber-50 p-6"
+      className="rounded-sm border border-vault-amber/60 bg-vault-surface p-6"
     >
-      <h2 className="mb-2 text-xl font-semibold text-gray-900">{title}</h2>
-      <p className="text-sm text-gray-700">{detail}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-amber">
+        Unavailable
+      </p>
+      <h2 className="mt-1 text-xl font-bold text-vault-text">{title}</h2>
+      <p className="mt-2 text-sm text-vault-muted">{detail}</p>
     </section>
   )
 }

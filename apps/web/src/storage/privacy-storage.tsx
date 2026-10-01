@@ -69,41 +69,42 @@ export function PrivacyStorage({ initialSnapshot }: { readonly initialSnapshot?:
     } catch { setNotice({ status: 'error', message: 'Storage operation failed. Completion could not be confirmed.' }) }
     finally { setBusy(false); closeConfirmation() }
   }
-  return <section aria-labelledby="privacy-heading" className="mt-8 rounded-lg border border-gray-200 bg-white p-4">
-    <h2 id="privacy-heading" className="mb-3 text-xl font-bold text-gray-900">Privacy / Storage</h2>
-    <p className="mb-4 text-sm text-gray-700">RaidVault core works locally without telemetry, analytics, or cloud AI. This build uses synthetic demo data and no real player account.</p>
-    <dl className="space-y-2 break-words text-sm text-gray-700">
-      <dt className="font-semibold">Application</dt><dd>RaidVault {APP_VERSION} · Build {APP_BUILD}</dd>
-      <dt className="font-semibold">Local snapshots</dt><dd>{snapshot === undefined ? 'Checking' : snapshot.status === 'ready'
+  return <section aria-labelledby="privacy-heading" className="rounded-sm border border-vault-line bg-vault-surface p-4">
+    <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-muted">Local data</p>
+    <h2 id="privacy-heading" className="mt-1 text-xl font-bold text-vault-text">Privacy / Storage</h2>
+    <p className="mb-4 mt-1 text-sm text-vault-muted">RaidVault core works locally without telemetry, analytics, or cloud AI. This build uses synthetic demo data and no real player account.</p>
+    <dl className="space-y-2 break-words text-sm text-vault-muted">
+      <dt className="font-semibold text-vault-text">Application</dt><dd>RaidVault {APP_VERSION} · Build {APP_BUILD}</dd>
+      <dt className="font-semibold text-vault-text">Local snapshots</dt><dd>{snapshot === undefined ? 'Checking' : snapshot.status === 'ready'
         ? `Saved · ${snapshot.snapshot.providerId} · captured ${new Date(snapshot.snapshot.state.snapshotMetadata.capturedAt).toISOString()}`
         : snapshot.message}</dd>
-      <dt className="font-semibold">Game knowledge</dt><dd>Bundled synthetic dataset · {MOCK_GAME_DATA_PAYLOAD.metadata.origin} · {MOCK_GAME_DATA_PAYLOAD.metadata.revision}. No independently stored game-data cache.</dd>
-      <dt className="font-semibold">Offline shell cache</dt><dd>{cacheStatus}{cacheNames === undefined ? '' : ` · ${cacheNames.length} owned cache(s)`}</dd>
-      {cacheNames !== undefined && cacheNames.length > 0 && <dd><ul>{cacheNames.map((name) => <li key={name}>{name}</li>)}</ul></dd>}
-      <dt className="font-semibold">Browser origin storage</dt><dd>{info === undefined ? 'Checking' : info.status === 'unsupported' ? 'Unsupported' : info.status === 'error' ? 'Unknown — estimate failed' : `Usage: ${bytes(info.usage)} · Quota: ${bytes(info.quota)}`}. Estimates cover the whole origin, not individual categories.</dd>
-      <dt className="font-semibold">Persistent storage</dt><dd>{info?.persistent ?? 'Checking'}. Persistence is not required; the browser may evict local data.</dd>
-      <dt className="font-semibold">M8 model storage</dt><dd>No production model, descriptor, or artifact store is configured. Model size is unavailable.</dd>
+      <dt className="font-semibold text-vault-text">Game knowledge</dt><dd>Bundled synthetic dataset · {MOCK_GAME_DATA_PAYLOAD.metadata.origin} · {MOCK_GAME_DATA_PAYLOAD.metadata.revision}. No independently stored game-data cache.</dd>
+      <dt className="font-semibold text-vault-text">Offline shell cache</dt><dd>{cacheStatus}{cacheNames === undefined ? '' : ` · ${cacheNames.length} owned cache(s)`}</dd>
+      {cacheNames !== undefined && cacheNames.length > 0 && <dd><ul className="font-mono text-[11px]">{cacheNames.map((name) => <li key={name} className="truncate">{name}</li>)}</ul></dd>}
+      <dt className="font-semibold text-vault-text">Browser origin storage</dt><dd>{info === undefined ? 'Checking' : info.status === 'unsupported' ? 'Unsupported' : info.status === 'error' ? 'Unknown — estimate failed' : `Usage: ${bytes(info.usage)} · Quota: ${bytes(info.quota)}`}. Estimates cover the whole origin, not individual categories.</dd>
+      <dt className="font-semibold text-vault-text">Persistent storage</dt><dd>{info?.persistent ?? 'Checking'}. Persistence is not required; the browser may evict local data.</dd>
+      <dt className="font-semibold text-vault-text">M8 model storage</dt><dd>No production model, descriptor, or artifact store is configured. Model size is unavailable.</dd>
     </dl>
-    <div className="mt-4 flex flex-wrap gap-3">
+    <div className="mt-4 flex flex-wrap gap-2">
       {(['snapshots', 'shell'] as const).map((category) => <button key={category} type="button"
         disabled={busy || confirm !== undefined || (category === 'snapshots'
           ? snapshot === undefined || snapshot.status === 'unsupported'
           : cacheStatus === 'Checking' || cacheStatus === 'Unsupported')}
-        className="rounded border border-gray-400 px-3 py-2 text-sm disabled:opacity-50"
+        className="rounded-sm border border-vault-line bg-vault-raised px-3 py-2 text-sm font-semibold text-vault-text disabled:opacity-50"
         onClick={(event) => { triggerRef.current = event.currentTarget; setConfirm(category) }}>
         {category === 'snapshots' ? 'Clear saved snapshots' : 'Clear offline app-shell caches'}
       </button>)}
-      <button type="button" disabled aria-describedby="model-removal-reason" className="rounded border border-gray-400 px-3 py-2 text-sm disabled:opacity-50">Remove local model</button>
+      <button type="button" disabled aria-describedby="model-removal-reason" className="rounded-sm border border-vault-line px-3 py-2 text-sm text-vault-muted disabled:opacity-50">Remove local model</button>
     </div>
-    <p id="model-removal-reason" className="mt-2 text-sm text-gray-700">Model removal is unavailable: no actual M8 model manager is configured.</p>
+    <p id="model-removal-reason" className="mt-2 text-sm text-vault-muted">Model removal is unavailable: no actual M8 model manager is configured.</p>
     {confirm !== undefined && <div role="group" aria-labelledby="clear-confirmation-title" aria-busy={busy}
-      className="mt-4 rounded border border-amber-400 bg-amber-50 p-4"
+      className="mt-4 rounded-sm border border-vault-amber/60 bg-vault-void p-4"
       onKeyDown={(event) => { if (event.key === 'Escape' && !busy) closeConfirmation() }}>
-      <h3 id="clear-confirmation-title" className="font-semibold">Confirm {confirm === 'snapshots' ? 'snapshot deletion' : 'app-shell cache deletion'}</h3>
-      <p className="my-2 text-sm">{descriptions[confirm]}</p>
-      <button ref={cancelRef} type="button" disabled={busy} className="mr-3 rounded border border-gray-400 px-3 py-2" onClick={closeConfirmation}>Cancel</button>
-      <button type="button" disabled={busy} className="rounded bg-gray-900 px-3 py-2 text-white" onClick={() => { void clear() }}>{busy ? 'Clearing…' : 'Confirm deletion'}</button>
+      <h3 id="clear-confirmation-title" className="font-semibold text-vault-text">Confirm {confirm === 'snapshots' ? 'snapshot deletion' : 'app-shell cache deletion'}</h3>
+      <p className="my-2 text-sm text-vault-muted">{descriptions[confirm]}</p>
+      <button ref={cancelRef} type="button" disabled={busy} className="mr-3 rounded-sm border border-vault-line bg-vault-raised px-3 py-2 text-vault-text" onClick={closeConfirmation}>Cancel</button>
+      <button type="button" disabled={busy} className="rounded-sm bg-vault-amber px-3 py-2 font-semibold text-vault-amberink" onClick={() => { void clear() }}>{busy ? 'Clearing…' : 'Confirm deletion'}</button>
     </div>}
-    <p role={notice?.status === 'error' ? 'alert' : 'status'} className="mt-3 text-sm text-gray-700">{notice?.message ?? 'Only RaidVault-owned categories can be cleared here.'}</p>
+    <p role={notice?.status === 'error' ? 'alert' : 'status'} className="mt-3 text-sm text-vault-muted">{notice?.message ?? 'Only RaidVault-owned categories can be cleared here.'}</p>
   </section>
 }
