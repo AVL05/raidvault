@@ -8,6 +8,7 @@ import {
   type ArcAiSnapshot,
   type VerifiedAiContext,
 } from '@raidvault/ai-engine'
+import { SectionLabel, StatusChip } from '../ui/vault'
 
 export interface ArcAiChatViewProps {
   readonly snapshot: ArcAiSnapshot
@@ -31,40 +32,53 @@ export function ArcAiChatView({
 }: ArcAiChatViewProps) {
   const generating = snapshot.status === 'GENERATING'
   return (
-    <div className="rounded-lg bg-white p-4 shadow">
-      <p className="mb-3 text-sm text-gray-600">
+    <div className="rounded-sm border border-vault-line bg-vault-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionLabel>Conversation</SectionLabel>
+        <StatusChip tone={snapshot.status === 'BLOCKED' ? 'amber' : 'neutral'}>
+          {snapshot.status}
+        </StatusChip>
+      </div>
+      <p className="mt-2 text-sm text-vault-muted">
         Answers are based on your validated RaidVault snapshot.
       </p>
       {snapshot.messages.length === 0 ? (
-        <p className="mb-3 text-sm text-gray-500">
+        <p className="mt-3 rounded-sm border border-dashed border-vault-line p-3 text-sm text-vault-muted">
           Ask about stash quantities, missing items, classifications, priorities, or target
           completion.
         </p>
       ) : (
-        <ul aria-live="polite" className="mb-3 max-h-96 space-y-2 overflow-y-auto">
+        <ul aria-live="polite" className="vault-scroll mt-3 max-h-96 space-y-2 overflow-y-auto">
           {snapshot.messages.map((message) => (
-            <li key={message.id} className="rounded bg-gray-50 p-2 text-sm">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <li
+              key={message.id}
+              className={
+                message.role === 'USER'
+                  ? 'ml-6 rounded-sm border border-vault-line bg-vault-void p-2.5 text-sm'
+                  : 'mr-6 rounded-sm border border-vault-amber/40 bg-vault-raised p-2.5 text-sm'
+              }
+            >
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-micro text-vault-amber">
                 {message.role === 'USER' ? 'You' : 'ARC AI'}
               </span>
-              <span className="text-gray-900">{message.content}</span>
+              <span className="text-vault-text">{message.content}</span>
             </li>
           ))}
         </ul>
       )}
       {snapshot.status === 'BLOCKED' && (
-        <p role="status" className="mb-3 text-sm font-medium text-gray-900">
+        <p role="status" className="mt-3 rounded-sm border border-vault-amber/50 bg-vault-void p-2.5 text-sm font-semibold text-vault-amber">
           Local AI blocked while Gaming Mode is ACTIVE or UNKNOWN.
         </p>
       )}
       {snapshot.status === 'UNAVAILABLE' && (
-        <p role="status" className="mb-3 text-sm font-medium text-gray-900">
+        <p role="status" className="mt-3 rounded-sm border border-vault-line bg-vault-void p-2.5 text-sm text-vault-muted">
           No production model is configured. Deterministic facts remain available through stash
           and planning views.
         </p>
       )}
       {snapshot.error !== undefined && (
-        <p role="alert" className="mb-3 rounded bg-red-50 p-2 text-sm text-red-800">
+        <p role="alert" className="mt-3 rounded-sm border border-vault-danger/60 bg-vault-void p-2.5 text-sm text-vault-danger">
           {snapshot.error}
         </p>
       )}
@@ -74,7 +88,7 @@ export function ArcAiChatView({
           onSubmit()
         }}
         aria-busy={generating}
-        className="flex flex-wrap gap-2"
+        className="mt-3 flex flex-wrap gap-2"
       >
         <label htmlFor="arc-ai-input" className="sr-only">
           Ask ARC AI
@@ -85,12 +99,12 @@ export function ArcAiChatView({
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
           placeholder="Ask about your stash…"
-          className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="min-w-0 flex-1 rounded-sm border border-vault-line bg-vault-void px-3 py-2 text-sm text-vault-text placeholder:text-vault-muted/70"
         />
         <button
           type="submit"
           disabled={generating}
-          className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 rounded-sm bg-vault-amber px-4 py-2 text-sm font-bold text-vault-amberink disabled:cursor-not-allowed disabled:opacity-50"
         >
           Send
         </button>
@@ -98,13 +112,13 @@ export function ArcAiChatView({
           <button
             type="button"
             onClick={onCancel}
-            className="shrink-0 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
+            className="shrink-0 rounded-sm border border-vault-line bg-vault-raised px-4 py-2 text-sm font-semibold text-vault-text"
           >
             Cancel
           </button>
         )}
       </form>
-      <p role="status" className="mt-2 text-sm text-gray-600">{generating ? 'Generating…' : ''}</p>
+      <p role="status" className="mt-2 font-mono text-xs text-vault-muted">{generating ? 'Generating…' : ''}</p>
     </div>
   )
 }

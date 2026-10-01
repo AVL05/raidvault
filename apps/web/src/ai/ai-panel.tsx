@@ -12,6 +12,7 @@ import {
   type StorageReport,
 } from '@raidvault/ai-engine'
 import { readBrowserCapabilityEnvironment } from './capability-env'
+import { SectionLabel } from '../ui/vault'
 
 export interface AiStatusViewProps {
   readonly capabilities: AiCapabilities | undefined
@@ -47,11 +48,11 @@ function ControlButton({
       disabled={disabled}
       title={reason ?? undefined}
       onClick={onClick}
-      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-sm border border-vault-line bg-vault-raised px-3 py-2 text-sm font-semibold text-vault-text disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
-    {disabled && reason !== undefined && <span className="text-xs text-gray-700">{reason}</span>}
+    {disabled && reason !== undefined && <span className="max-w-44 text-[11px] text-vault-muted">{reason}</span>}
     </span>
   )
 }
@@ -70,11 +71,12 @@ export function AiStatusView({
   onRefresh,
 }: AiStatusViewProps) {
   return (
-    <div className="rounded-lg bg-white p-4 shadow">
-      <dl className="space-y-2 text-sm">
+    <div className="rounded-sm border border-vault-line bg-vault-surface p-4">
+      <SectionLabel>Engine status</SectionLabel>
+      <dl className="mt-3 space-y-2 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">WebGPU</dt>
-          <dd role="status" className="text-right text-gray-900">
+          <dt className="text-vault-muted">WebGPU</dt>
+          <dd role="status" className="text-right text-vault-text">
             {capabilities === undefined
               ? 'Checking WebGPU support…'
               : capabilities.supported
@@ -83,47 +85,47 @@ export function AiStatusView({
           </dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Model state</dt>
-          <dd className="text-right text-gray-900">{snapshot.state}</dd>
+          <dt className="text-vault-muted">Model state</dt>
+          <dd className="text-right font-mono text-vault-text">{snapshot.state}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Model</dt>
-          <dd className="text-right text-gray-900">
+          <dt className="text-vault-muted">Model</dt>
+          <dd className="text-right text-vault-text">
             {snapshot.modelId ?? 'No model is configured'}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Installed</dt>
-          <dd className="text-right text-gray-900">
+          <dt className="text-vault-muted">Installed</dt>
+          <dd className="text-right text-vault-text">
             {snapshot.installed ? 'Installed' : 'Not installed'}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Gaming Mode</dt>
-          <dd className="text-right font-semibold text-gray-900">{gamingMode}</dd>
+          <dt className="text-vault-muted">Gaming Mode</dt>
+          <dd className="text-right font-bold text-vault-amber">{gamingMode}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Model size</dt>
-          <dd className="text-right text-gray-900">
+          <dt className="text-vault-muted">Model size</dt>
+          <dd className="text-right font-mono text-vault-text">
             {storage.installed ? formatBytes(storage.modelBytes) : 'Not installed'}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Storage usage</dt>
-          <dd className="text-right text-gray-900">{formatBytes(storage.usageBytes)}</dd>
+          <dt className="text-vault-muted">Storage usage</dt>
+          <dd className="text-right font-mono text-vault-text">{formatBytes(storage.usageBytes)}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-medium text-gray-500">Storage quota</dt>
-          <dd className="text-right text-gray-900">{formatBytes(storage.quotaBytes)}</dd>
+          <dt className="text-vault-muted">Storage quota</dt>
+          <dd className="text-right font-mono text-vault-text">{formatBytes(storage.quotaBytes)}</dd>
         </div>
       </dl>
       {snapshot.error !== undefined && (
-        <p role="alert" className="mt-3 rounded bg-red-50 p-2 text-sm text-red-800">
+        <p role="alert" className="mt-3 rounded-sm border border-vault-danger/60 bg-vault-void p-2 text-sm text-vault-danger">
           {snapshot.error}
         </p>
       )}
       {gamingMode !== 'INACTIVE' && (
-        <p className="mt-3 text-sm font-medium text-gray-900">{GAMING_MODE_BLOCKED_MESSAGE}</p>
+        <p className="mt-3 text-sm font-semibold text-vault-amber">{GAMING_MODE_BLOCKED_MESSAGE}</p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         <ControlButton
