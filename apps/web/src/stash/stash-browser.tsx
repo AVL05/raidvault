@@ -121,7 +121,7 @@ export function StashBrowser({ rows, categories, summary, status }: StashBrowser
           </p>
         )}
         {visibleRows.length > 0 && (
-          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+          <ul className="vault-inventory mt-2 grid gap-2 sm:grid-cols-2">
             {visibleRows.map((row) => {
               const selected = row.itemId === selectedId
               return (
@@ -132,8 +132,8 @@ export function StashBrowser({ rows, categories, summary, status }: StashBrowser
                     aria-pressed={selected}
                     className={
                       selected
-                        ? 'w-full rounded-sm border-2 border-vault-amber bg-vault-raised p-3 text-left'
-                        : 'w-full rounded-sm border border-vault-line bg-vault-surface p-3 text-left hover:border-vault-muted'
+                        ? 'vault-item w-full rounded-sm border-2 border-vault-amber bg-vault-raised p-3 text-left'
+                        : 'vault-item w-full rounded-sm border-2 border-vault-line bg-vault-surface p-3 text-left hover:border-vault-muted'
                     }
                   >
                     <span className="flex items-start justify-between gap-2">

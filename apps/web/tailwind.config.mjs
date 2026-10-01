@@ -7,17 +7,17 @@ export default {
     extend: {
       colors: {
         vault: {
-          void: "#090D12",
-          surface: "#121820",
-          raised: "#1B2531",
-          text: "#F2EEE5",
-          muted: "#9AA6B2",
-          line: "#2A3644",
-          amber: "#E6A63A",
-          amberink: "#1A1206",
-          signal: "#54A8C8",
-          safe: "#68B982",
-          danger: "#D76A63",
+          void: "rgb(var(--vault-void) / <alpha-value>)",
+          surface: "rgb(var(--vault-surface) / <alpha-value>)",
+          raised: "rgb(var(--vault-raised) / <alpha-value>)",
+          text: "rgb(var(--vault-text) / <alpha-value>)",
+          muted: "rgb(var(--vault-muted) / <alpha-value>)",
+          line: "rgb(var(--vault-line) / <alpha-value>)",
+          amber: "rgb(var(--vault-amber) / <alpha-value>)",
+          amberink: "rgb(var(--vault-amberink) / <alpha-value>)",
+          signal: "rgb(var(--vault-signal) / <alpha-value>)",
+          safe: "rgb(var(--vault-safe) / <alpha-value>)",
+          danger: "rgb(var(--vault-danger) / <alpha-value>)",
         },
       },
       fontFamily: {

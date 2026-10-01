@@ -1,69 +1,146 @@
-/* RaidVault tactical foundations — dark industrial utility, Inter system stack. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html {
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background-color: #090d12;
-  color: #f2eee5;
+@font-face { font-family: 'Barlow Condensed'; src: url('/fonts/barlow-condensed-bold.ttf') format('truetype'); font-style: normal; font-weight: 700; font-display: swap; }
+:root {
+  color-scheme: dark;
+  --vault-void: 23 27 25;
+  --vault-surface: 33 39 35;
+  --vault-raised: 45 52 46;
+  --vault-text: 242 236 219;
+  --vault-muted: 177 184 167;
+  --vault-line: 73 82 71;
+  --vault-amber: 247 189 69;
+  --vault-amberink: 34 27 12;
+  --vault-signal: 120 191 217;
+  --vault-safe: 159 198 132;
+  --vault-danger: 245 148 126;
 }
-
-body {
-  margin: 0;
-  padding: 0;
-  background-color: #090d12;
-  color: #f2eee5;
-  font-size: 14px;
-  line-height: 1.5;
+html { background: rgb(var(--vault-void)); color: rgb(var(--vault-text)); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+body { margin: 0; font-size: 14px; line-height: 1.6; }
+main { display: block; }
+button, input, select { font: inherit; min-height: 44px; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button { transition: background-color 160ms ease-out, border-color 160ms ease-out; }
+button:not(:disabled) { cursor: pointer; }
+input, select { caret-color: rgb(var(--vault-amber)); }
+input::placeholder { color: rgb(var(--vault-muted)); opacity: 1; }
+a { text-underline-offset: 4px; }
+::selection { background: #f7bd45; color: #221b0c; }
+:focus-visible { outline: 2px solid rgb(var(--vault-amber)); outline-offset: 4px; }
+.skip-link { position: absolute; left: 1rem; top: -5rem; z-index: 60; padding: 12px 16px; background: #f7bd45; color: #221b0c; font-weight: 700; }
+.skip-link:focus { top: 1rem; }
+.vault-app { background: linear-gradient(135deg, #282e25 0, #171b19 38%, #171b19 100%); }
+.vault-header { border-bottom: 1px solid #495247; background: #171b19; }
+.vault-header::before { content: ''; display: block; height: 4px; background: linear-gradient(90deg, #79b5c9 0 25%, #f2e9d0 25% 50%, #ef754d 50% 75%, #f7bd45 75%); }
+.vault-header-inner { max-width: 1440px; min-height: 76px; margin: auto; display: flex; align-items: center; gap: 28px; padding: 12px 32px; }
+.vault-brand { display: flex; align-items: center; flex-shrink: 0; min-height: 44px; }
+.vault-brand img { width: 186px; height: auto; }
+.vault-header-caption { color: #b1b8a7; font-size: 11px; line-height: 1.7; }
+.vault-header-caption span { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.vault-header [role='status'] { max-width: 1376px; line-height: 1.6; }
+.vault-workspace { display: flex; gap: 40px; max-width: 1440px; margin: auto; padding: 36px 32px 64px; }
+.vault-rail { flex: 0 0 184px; }
+.vault-navigation { padding-bottom: 24px; border-bottom: 1px solid #495247; }
+.vault-nav-link { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 12px 14px; color: #b1b8a7; border: 1px solid transparent; font-size: 14px; font-weight: 600; }
+.vault-nav-link:hover { color: #f2ecdb; background: #2d342e; }
+.vault-nav-active { color: #221b0c; background: #f7bd45; border-color: #f7bd45; }
+.vault-nav-active:hover { color: #221b0c; background: #ffcf69; }
+.vault-nav-active > span { color: inherit; }
+.vault-nav-link svg { width: 20px; height: 20px; }
+.vault-local-note { margin-top: 26px; padding: 0 14px; }
+.vault-local-note > p:first-child { color: #f2ecdb; }
+.vault-local-note a { line-height: 1.7; }
+.vault-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; max-width: 1376px; margin: 0 auto; padding: 20px 0 30px; border-top: 1px solid #495247; color: #b1b8a7; font-size: 10px; letter-spacing: .08em; }
+/* Shelter signage: condensed lettering, warm paper and hardware-like controls. */
+main h1, .vault-briefing h1, .vault-section-heading h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: -.02em; line-height: 1; }
+main > h1 { margin-top: 0; font-size: clamp(42px, 5vw, 64px); }
+main > h1 + p { margin-top: 16px; line-height: 1.75; }
+main h2, main h3 { text-wrap: balance; }
+.vault-panel { padding: 22px; }
+.vault-panel > div:first-child { flex-wrap: wrap; }
+.vault-panel dl > div { flex-wrap: wrap; }
+.vault-status { min-height: 24px; line-height: 1.5; }
+.vault-section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin: 32px 0 12px; }
+.vault-section-heading h2 { font-size: 36px; }
+.vault-section-heading > span { color: #b1b8a7; font-size: 10px; letter-spacing: .14em; }
+.vault-briefing { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 260px; min-height: 300px; overflow: hidden; background: #e9e1cc; color: #232b25; }
+.vault-briefing-copy { position: relative; z-index: 1; padding: 32px; }
+.vault-briefing h1 { font-size: clamp(48px, 5.5vw, 76px); }
+.vault-briefing h1 span { color: #5b6554; }
+.vault-briefing-description { margin-top: 16px; line-height: 1.6; font-size: 14px; }
+.vault-briefing-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.vault-action-primary, .vault-action-secondary { display: inline-flex; justify-content: space-between; align-items: center; gap: 20px; min-height: 44px; padding: 10px 16px; font-size: 12px; font-weight: 700; }
+.vault-action-primary { background: #232b25; color: #f2ecdb; }
+.vault-action-primary:hover { background: #3c473b; }
+.vault-action-secondary { border: 1px solid #6b7562; color: #232b25; }
+.vault-action-secondary:hover { background: #d5cfba; }
+.vault-briefing :focus-visible { outline-color: #232b25; }
+.vault-briefing-art { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 28px; background: #d9d3bd; }
+.vault-briefing-art img { position: relative; width: 190px; height: auto; filter: drop-shadow(0 10px 10px #343d2630); }
+.vault-briefing-art > span { position: relative; font-size: 9px; font-weight: 700; letter-spacing: .12em; margin-top: 12px; }
+.vault-spectrum { position: absolute; inset: 0; display: flex; transform: skewX(-18deg) translateX(36px); }
+.vault-spectrum i { flex: 1; }
+.vault-spectrum i:nth-child(1) { background: #79b5c9; }
+.vault-spectrum i:nth-child(2) { background: #e8e0c9; }
+.vault-spectrum i:nth-child(3) { background: #ef754d; }
+.vault-spectrum i:nth-child(4) { background: #f7bd45; }
+.vault-overview-metrics { --vault-surface: 224 218 198; --vault-text: 35 43 37; --vault-muted: 78 89 73; --vault-line: 185 185 162; --vault-void: 201 201 177; --vault-amber: 120 68 12; --vault-safe: 45 100 56; }
+.vault-overview-metrics .vault-panel { border: 0; border-top: 3px solid #79b5c9; }
+.vault-overview-metrics .vault-panel:nth-child(2) { border-top-color: #a7bd8c; }
+.vault-overview-metrics .vault-panel:nth-child(3) { border-top-color: #ef754d; }
+.vault-overview-metrics .vault-panel:nth-child(4) { border-top-color: #f7bd45; }
+.vault-overview-metrics .text-2xl { font-size: 32px; font-variant-numeric: tabular-nums; }
+.vault-scroll, html { scrollbar-color: #6b7562 #171b19; scrollbar-width: thin; }
+.vault-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.vault-scroll::-webkit-scrollbar-thumb { background: #6b7562; border: 2px solid #171b19; }
+.vault-scroll::-webkit-scrollbar-track { background: transparent; }
+@media (max-width: 1100px) {
+  .vault-header-caption { display: none; }
+  .vault-workspace { gap: 24px; padding: 28px 24px 48px; }
+  .vault-rail { flex-basis: 160px; }
+  .vault-briefing { grid-template-columns: minmax(0, 1fr) 180px; }
+  .vault-briefing-art { padding: 20px; }
+  .vault-briefing-art img { width: 145px; }
+  .vault-briefing-copy { padding: 28px; }
+  .vault-footer { margin: 0 24px; }
 }
-
-main {
-  display: block;
+@media (max-width: 767px) {
+  .vault-header-inner { min-height: 68px; padding: 12px 20px; gap: 16px; }
+  .vault-brand img { width: 160px; }
+  .vault-workspace { display: block; padding: 24px 16px 32px; }
+  .vault-briefing { grid-template-columns: minmax(0, 1fr) 120px; min-height: 280px; }
+  .vault-briefing-copy { padding: 24px 20px; }
+  .vault-briefing h1 { font-size: 48px; }
+  .vault-briefing-art { padding: 12px; }
+  .vault-briefing-art img { width: 105px; }
+  .vault-briefing-art > span { display: none; }
+  .vault-briefing-actions { gap: 8px; }
+  .vault-briefing-actions a { gap: 8px; padding: 10px 12px; }
+  .vault-panel { padding: 18px; }
+  .vault-footer { margin: 0 16px; padding-bottom: 100px; font-size: 9px; }
+  .vault-bottom-nav { padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -8px 24px #00000020; }
 }
-
-::selection {
-  background: #e6a63a;
-  color: #1a1206;
+@media (max-width: 420px) {
+  .vault-briefing { grid-template-columns: minmax(0, 1fr) 64px; }
+  .vault-briefing h1 { font-size: 44px; }
+  .vault-briefing-art img { display: none; }
+  .vault-briefing-description { font-size: 13px; }
 }
-
-:focus-visible {
-  outline: 2px solid #e6a63a;
-  outline-offset: 2px;
-}
-
-.skip-link {
-  position: absolute;
-  left: 1rem;
-  top: -5rem;
-  z-index: 60;
-  padding: 0.75rem 1rem;
-  background: #e6a63a;
-  color: #1a1206;
-  font-weight: 700;
-  border-radius: 2px;
-}
-.skip-link:focus {
-  top: 1rem;
-}
-
-.vault-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-.vault-scroll::-webkit-scrollbar-thumb {
-  background: #2a3644;
-  border: 2px solid #090d12;
-}
-.vault-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+.vault-page-heading { position: relative; overflow: hidden; padding: 28px 32px; margin-bottom: 24px; background: #e9e1cc; color: #232b25; border-top: 4px solid #ef754d; }
+.vault-page-heading h1 { position: relative; font-size: clamp(44px, 5vw, 64px); }
+.vault-page-heading p { position: relative; max-width: 72ch; margin-top: 12px; line-height: 1.75; }
+.vault-inventory { --vault-surface: 224 218 198; --vault-raised: 240 232 210; --vault-text: 35 43 37; --vault-muted: 78 89 73; --vault-line: 185 185 162; --vault-amber: 120 68 12; --vault-safe: 45 100 56; --vault-signal: 30 88 109; }
+.vault-item { min-height: 136px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; }
+.vault-item:hover { background: #f0e8d2; }
+.vault-item[aria-pressed='true'] { box-shadow: inset 0 0 0 1px #78440c; }
+.vault-inventory > li[aria-hidden='true'] { min-height: 72px; display: flex; align-items: center; justify-content: center; color: #b1b8a7; border-color: #495247; }
+@media (max-width: 767px) { .vault-page-heading { padding: 24px 20px; } .vault-page-heading p { font-size: 13px; } }
+/* Grid children must shrink before long snapshot IDs wrap on small screens. */
+.vault-workspace main { overflow-wrap: anywhere; }
+.vault-workspace main .grid > * { min-width: 0; }

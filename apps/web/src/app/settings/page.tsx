@@ -1,3 +1,4 @@
+import { PageHeader } from '../../ui/vault'
 import { loadDemoWorkspace } from '../../data/workspace'
 import { PrivacyStorage } from '../../storage/privacy-storage'
 import { AiEnginePanel } from '../../ai/ai-panel'
@@ -8,12 +9,10 @@ export default async function SettingsPage() {
   const workspace = await loadDemoWorkspace()
   return (
     <main id="main-content" tabIndex={-1}>
-      <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-amber">Local control</p>
-      <h1 className="mt-1 text-[32px] font-bold text-vault-text">Settings</h1>
-      <p className="mt-1 max-w-2xl text-sm text-vault-muted">
+      <PageHeader title="Settings">
         Local snapshots, offline shell, model, Gaming Mode, and version truth.
         Clearing one category never clears the others.
-      </p>
+      </PageHeader>
       <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div>
           {workspace.ok ? (

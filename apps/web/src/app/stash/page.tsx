@@ -1,3 +1,4 @@
+import { PageHeader } from '../../ui/vault'
 import { loadDemoWorkspace } from '../../data/workspace'
 import { enrichRows } from '../../stash/analysis-model'
 import { StashBrowser } from '../../stash/stash-browser'
@@ -8,8 +9,7 @@ export default async function StashPage() {
   if (!workspace.ok) {
     return (
       <main id="main-content" tabIndex={-1}>
-        <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-amber">Inventory</p>
-        <h1 className="mt-1 text-[32px] font-bold text-vault-text">Stash</h1>
+        <PageHeader title="Stash" />
         <div className="mt-4">
           <UnavailablePanel title="Stash unavailable" detail="A validated player snapshot could not be obtained." />
         </div>
@@ -18,12 +18,10 @@ export default async function StashPage() {
   }
   return (
     <main id="main-content" tabIndex={-1}>
-      <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-amber">Inventory</p>
-      <h1 className="mt-1 text-[32px] font-bold text-vault-text">Stash</h1>
-      <p className="mt-1 max-w-2xl text-sm text-vault-muted">
+      <PageHeader title="Stash">
         Deterministic classifications only — KEEP, RESERVE, SELL, RECYCLE, REVIEW.
         Select an item for requirement facts and structured reasons.
-      </p>
+      </PageHeader>
       <div className="mt-5">
         <StashBrowser
           rows={enrichRows(workspace.rows, workspace.analysis)}

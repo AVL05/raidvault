@@ -55,7 +55,7 @@ export function VaultNav({ orientation }: { readonly orientation: 'rail' | 'bott
   const pathname = usePathname()
   if (orientation === 'rail') {
     return (
-      <nav aria-label="Primary" className="flex flex-col gap-1">
+      <nav aria-label="Primary" className="vault-navigation flex flex-col gap-1">
         {LINKS.map((link) => {
           const active = isActive(pathname, link.href)
           return (
@@ -63,11 +63,7 @@ export function VaultNav({ orientation }: { readonly orientation: 'rail' | 'bott
               key={link.href}
               href={link.href}
               aria-current={active ? 'page' : undefined}
-              className={
-                active
-                  ? 'flex items-center gap-2.5 rounded-sm border border-vault-amber/50 bg-vault-raised px-3 py-2 text-sm font-semibold text-vault-text'
-                  : 'flex items-center gap-2.5 rounded-sm border border-transparent px-3 py-2 text-sm font-medium text-vault-muted hover:border-vault-line hover:text-vault-text'
-              }
+              className={`vault-nav-link ${active ? 'vault-nav-active' : ''}`}
             >
               <span aria-hidden="true" className={active ? 'text-vault-amber' : ''}>
                 <NavIcon label={link.label} />
@@ -82,7 +78,7 @@ export function VaultNav({ orientation }: { readonly orientation: 'rail' | 'bott
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-vault-line bg-vault-surface/95 backdrop-blur md:hidden"
+      className="vault-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-vault-line bg-vault-surface md:hidden"
     >
       <ul className="grid grid-cols-5">
         {LINKS.map((link) => {

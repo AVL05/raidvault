@@ -10,7 +10,8 @@ if (process.argv[2] === 'prepare') {
 } else {
   const offline = readFileSync(join(webRoot, '.next/server/app/offline.html'))
   const paths = new Set(['/offline', '/manifest.webmanifest',
-    '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-180.png'])
+    '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-180.png',
+    '/icons/favicon-32.png', '/brand/wordmark.webp', '/brand/emblem.webp', '/fonts/barlow-condensed-bold.ttf'])
   // Explicit build inventory; never a runtime URL/prefix cache rule.
   const visit = (directory, prefix) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {

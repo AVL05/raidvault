@@ -2,6 +2,12 @@ import type { PlanningSnapshot, StashAnalysis } from '@raidvault/rules-engine'
 import type { StashStatus, StashSummary } from '../stash/view-model'
 import type { EnrichedStashRow } from '../stash/analysis-model'
 import { ClassificationBadge, Panel, ProgressBar, SectionLabel, StatusChip } from '../ui/vault'
+import Image from 'next/image'
+import Link from 'next/link'
+
+function ActionArrow() {
+  return <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 18 18 6M6 6h12v12" /></svg>
+}
 
 export interface OverviewData {
   readonly rows: readonly EnrichedStashRow[]
@@ -28,18 +34,28 @@ export function Overview({ data }: { readonly data: OverviewData }) {
   const sample = data.rows.slice(0, 4)
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-amber">
-        RaidVault · v0.1.0 public preview
-      </p>
-      <h1 className="mt-1 text-[32px] font-bold leading-tight text-vault-text">
-        Overview
-      </h1>
+      <div className="vault-briefing">
+        <div className="vault-briefing-copy">
+          <h1>Every raid.<br /><span>A little wiser.</span></h1>
+          <p className="vault-briefing-description">Know what to keep. Find what you need.<br />Make the next trip count.</p>
+          <div className="vault-briefing-actions">
+            <Link href="/stash" className="vault-action-primary">Open your stash <ActionArrow /></Link>
+            <Link href="/planning" className="vault-action-secondary">Plan the next raid <ActionArrow /></Link>
+          </div>
+        </div>
+        <div className="vault-briefing-art" aria-hidden="true">
+          <div className="vault-spectrum"><i /><i /><i /><i /></div>
+          <Image src="/brand/emblem.webp" alt="" width={400} height={458} priority unoptimized />
+          <span>YOUR STASH. YOUR CALL.</span>
+        </div>
+      </div>
+      <div className="vault-section-heading"><h2>Overview</h2><span>DEMO WORKSPACE</span></div>
       <p className="mt-1 max-w-2xl text-sm text-vault-muted">
         Synthetic demo snapshot · no live account integration. Every number below
         comes from validated snapshot, game knowledge, and deterministic analysis.
       </p>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="vault-overview-metrics mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Panel label="Stash occupancy">
           <SectionLabel>Stash occupancy</SectionLabel>
           {occ === undefined ? (

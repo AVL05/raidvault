@@ -1,5 +1,7 @@
 import { VaultNav } from './nav'
 import { StatusChip } from './vault'
+import Image from 'next/image'
+import Link from 'next/link'
 
 /**
  * Tactical app shell: top header, left desktop rail, bottom mobile bar.
@@ -13,22 +15,17 @@ export function AppShell({
   readonly onlineHint?: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-vault-void text-vault-text">
+    <div className="vault-app min-h-screen text-vault-text">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b border-vault-line bg-vault-surface">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
-          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-sm bg-vault-amber font-mono text-sm font-black text-vault-amberink">
-            RV
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold tracking-wide">RAIDVAULT</p>
-            <p className="truncate text-[11px] uppercase tracking-micro text-vault-muted">
-              Local ARC companion · v0.1.0 preview
-            </p>
-          </div>
-          <div className="ml-auto hidden items-center gap-2 sm:flex">
+      <header className="vault-header sticky top-0 z-40">
+        <div className="vault-header-inner">
+          <Link href="/" aria-label="RaidVault home" className="vault-brand">
+            <Image src="/brand/wordmark.webp" alt="RaidVault" width={1000} height={177} priority unoptimized />
+          </Link>
+          <p className="vault-header-caption">Unofficial ARC Raiders companion<br /><span>v0.1.0 / public preview</span></p>
+          <div className="ml-auto hidden flex-wrap items-center justify-end gap-2 sm:flex">
             <StatusChip tone="neutral">Demo snapshot</StatusChip>
             <StatusChip tone="amber">Gaming Unknown</StatusChip>
             <StatusChip tone="neutral">AI locked</StatusChip>
@@ -36,11 +33,11 @@ export function AppShell({
         </div>
         {onlineHint}
       </header>
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-24 pt-6 md:pb-10">
-        <aside className="hidden w-52 shrink-0 md:block">
-          <div className="sticky top-[68px]">
+      <div className="vault-workspace">
+        <aside className="vault-rail hidden md:block">
+          <div className="sticky top-[132px]">
             <VaultNav orientation="rail" />
-            <div className="mt-6 rounded-sm border border-vault-line bg-vault-surface p-3">
+            <div className="vault-local-note">
               <p className="text-[11px] font-semibold uppercase tracking-micro text-vault-muted">
                 Local-first
               </p>
@@ -56,6 +53,7 @@ export function AppShell({
         </aside>
         <div className="min-w-0 flex-1">{children}</div>
       </div>
+      <footer className="vault-footer"><span>RAIDVAULT / LOCAL-FIRST</span><span>Unofficial companion · Not affiliated with Embark Studios</span></footer>
       <VaultNav orientation="bottom" />
     </div>
   )

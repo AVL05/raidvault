@@ -1,5 +1,19 @@
 import type { ItemClassification } from '@raidvault/rules-engine'
 
+/** Shared shelter signage for every workspace route. */
+export function PageHeader({ title, children, id }: {
+  readonly title: string
+  readonly children?: React.ReactNode
+  readonly id?: string
+}) {
+  return (
+    <header className="vault-page-heading">
+      <h1 id={id}>{title}</h1>
+      {children && <p>{children}</p>}
+    </header>
+  )
+}
+
 /** Uppercase micro-label with tracking — the Figma section-label language. */
 export function SectionLabel({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -22,7 +36,7 @@ export function Panel({
   return (
     <section
       aria-label={label}
-      className={`rounded-sm border border-vault-line bg-vault-surface p-4 ${className}`}
+      className={`vault-panel rounded-sm border border-vault-line bg-vault-surface p-4 ${className}`}
     >
       {children}
     </section>
@@ -72,7 +86,7 @@ export function StatusChip({
   }
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tones[tone]}`}
+      className={`vault-status inline-flex items-center gap-1 rounded-sm border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tones[tone]}`}
     >
       {children}
     </span>
