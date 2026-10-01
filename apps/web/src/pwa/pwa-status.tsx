@@ -26,13 +26,15 @@ export function PwaStatus() {
     }
   }, [])
   return (
-    <aside aria-label="Connection and application update" className="border-b border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
-      <p role="status">Browser network: {online === undefined ? 'Unknown' : online ? 'Online' : 'Offline'}.
-        {' '}This does not verify provider or Bridge availability.</p>
-      {worker === 'pending' && <p role="status">An update is pending. Finish your work, then close all RaidVault tabs and reopen to update.</p>}
-      {worker === 'error' && <p role="status">Offline shell registration failed. The current application remains usable.</p>}
-      {worker === 'unsupported' && <p>Offline shell is unsupported in this browser.</p>}
-      <a href="/offline" className="mt-1 inline-block underline">Open saved local workspace</a>
-    </aside>
+    <div className="border-t border-vault-line bg-vault-void px-4 py-1.5 text-[11px] text-vault-muted">
+      <p role="status" className="mx-auto max-w-6xl">
+        Browser network: {online === undefined ? 'Unknown' : online ? 'Online' : 'Offline'}.
+        {' '}This does not verify provider or Bridge availability. Connectivity alone
+        never marks snapshots fresh.
+        {worker === 'pending' && ' Finish your work, then close all RaidVault tabs and reopen to update.'}
+        {worker === 'error' && ' Offline shell registration failed — the app remains usable.'}
+        {worker === 'unsupported' && ' Offline shell unsupported in this browser.'}
+      </p>
+    </div>
   )
 }

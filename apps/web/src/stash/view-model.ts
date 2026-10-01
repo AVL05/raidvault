@@ -81,11 +81,11 @@ export function buildStashRows(
  * composed with an optional category filter. An empty query returns
  * every row that passes the category filter.
  */
-export function filterStashRows(
-  rows: readonly StashRow[],
+export function filterStashRows<T extends StashRow>(
+  rows: readonly T[],
   query: string,
   category: string
-): StashRow[] {
+): T[] {
   const needle = query.trim().toLowerCase()
   return rows.filter((row) => {
     if (category !== ALL_CATEGORIES && row.category !== category) {

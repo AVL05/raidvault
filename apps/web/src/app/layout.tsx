@@ -1,16 +1,17 @@
 import "./globals.css";
 import type { Metadata, Viewport } from 'next'
+import { AppShell } from '../ui/app-shell'
 import { PwaStatus } from '../pwa/pwa-status'
 
 export const metadata: Metadata = {
-  title: "RaidVault — Stash",
+  title: "RaidVault — Local ARC Companion",
   description: "Local-first ARC Raiders stash companion",
   applicationName: 'RaidVault',
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-180.png' },
-  appleWebApp: { capable: true, title: 'RaidVault', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'RaidVault', statusBarStyle: 'black-translucent' },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#111827' }
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#090D12' }
 
 export default function RootLayout({
   children,
@@ -18,9 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <a href="#main-content" className="skip-link">Skip to content</a>
-        <PwaStatus />
-        {children}
+        <AppShell onlineHint={<PwaStatus />}>{children}</AppShell>
       </body>
     </html>
   );
