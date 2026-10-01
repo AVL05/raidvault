@@ -13,7 +13,7 @@
  *
  * No production model or runtime exists yet, so production generation
  * stays explicitly unavailable; deterministic facts still answer
- * directly without any model.
+ * directly without a model.
  */
 
 import type { PlayerState } from '@raidvault/domain'
@@ -39,6 +39,12 @@ export const MAX_CONTEXT_TARGETS = 20
 
 /** Maximum catalog entries carried for search. */
 export const MAX_CATALOG_ENTRIES = 100
+
+/** Maximum raid priorities carried in one context. */
+export const MAX_CONTEXT_PRIORITIES = 20
+
+/** Maximum incomplete references carried in one context. */
+export const MAX_CONTEXT_INCOMPLETE_REFERENCES = 10
 
 /** Default search result cap. */
 export const MAX_SEARCH_RESULTS = 10
@@ -148,39 +154,116 @@ function displayNameOf(knowledge: GameKnowledge, itemId: string): string | undef
   return undefined
 }
 
-function fingerprintParts(parts: readonly string[]): string {
-  return parts.join(',')
+/**
+ * Length-prefixed scalar encoding. Prefixing makes concatenation
+ * unambiguous without relying on separator escaping.
+ */
+function field(value: string | number | boolean | undefined): string {
+  if (value === undefined) {
+    return '?:'
+  }
+  const text = typeof value === 'string' ? value : String(value)
+  return `${text.length}:${text}`
 }
 
-function buildContextVersion(
-  playerState: PlayerState,
-  gameKnowledge: GameKnowledge
+function pushTargetPlan(parts: string[], fact: {
+  readonly provenance: AiFactProvenance
+  readonly state: AiKnowledgeState
+  readonly value: TargetPlan
+}): void {
+  parts.push(field(fact.provenance))
+  parts.push(field(fact.state))
+  parts.push(field(fact.value.targetType))
+  parts.push(field(fact.value.targetId))
+  parts.push(field(fact.value.targetName))
+  parts.push(field(fact.value.complete))
+  for (const gap of fact.value.requirements) {
+    parts.push(field(gap.targetType))
+    parts.push(field(gap.targetId))
+    parts.push(field(gap.itemId))
+    parts.push(field(gap.requiredForTarget))
+    parts.push(field(gap.owned))
+    parts.push(field(gap.missingForTarget))
+  }
+}
+
+/**
+ * Deterministic fingerprint over the final bounded AI-visible payload.
+ * Covers snapshot, stash, every item fact (quantities, classification,
+ * reason codes and messages), every bounded target (identity, name,
+ * completion, per-target gaps), priorities, catalog entries (id, name,
+ * category), incomplete references, and the workshop flag. Field order
+ * is fixed by construction; no clock, randomness, or hash involved.
+ */
+export function fingerprintVerifiedContext(
+  context: Omit<VerifiedAiContext, 'version'>
 ): string {
-  const stashFingerprint =
-    playerState.stash === undefined
-      ? 'no-stash'
-      : fingerprintParts(
-          playerState.stash.items.map((entry) => `${entry.id}:${entry.quantity}`)
-        )
-  const questIds = (playerState.questProgress ?? []).map((entry) => entry.questId)
-  const projectIds = (playerState.projects ?? []).map((entry) => entry.projectId)
-  const progressionFingerprint =
-    questIds.length === 0 && projectIds.length === 0
-      ? 'no-progression'
-      : fingerprintParts([...questIds, ...projectIds])
-  const knowledgeFingerprint = fingerprintParts(
-    gameKnowledge.items.map((item) => `${item.id}:${item.name}`)
-  )
-  return [
-    CONTEXT_SCHEMA_VERSION,
-    String(playerState.snapshotMetadata.capturedAt),
-    gameKnowledge.metadata.sourceId,
-    gameKnowledge.metadata.datasetVersion,
-    String(gameKnowledge.metadata.capturedAt),
-    stashFingerprint,
-    progressionFingerprint,
-    knowledgeFingerprint,
-  ].join('|')
+  const parts: string[] = [CONTEXT_SCHEMA_VERSION]
+  parts.push('snapshot')
+  parts.push(field(context.snapshot.capturedAt))
+  parts.push(field(context.snapshot.providerId))
+  parts.push(field(context.snapshot.stale))
+  parts.push('stash')
+  parts.push(field(context.stash.provenance))
+  parts.push(field(context.stash.state))
+  parts.push(field(context.stash.value.hasStash))
+  parts.push(field(context.stash.value.itemCount))
+  parts.push(field(context.stash.value.usedSlots))
+  parts.push(field(context.stash.value.totalSlots))
+  parts.push('items')
+  for (const fact of context.items) {
+    parts.push('item')
+    parts.push(field(fact.provenance))
+    parts.push(field(fact.state))
+    parts.push(field(fact.value.itemId))
+    parts.push(field(fact.value.displayName))
+    parts.push(field(fact.value.owned))
+    parts.push(field(fact.value.required))
+    parts.push(field(fact.value.reserved))
+    parts.push(field(fact.value.missing))
+    parts.push(field(fact.value.surplus))
+    parts.push(field(fact.value.classification))
+    for (const reason of fact.value.reasons) {
+      parts.push(field(reason.code))
+      parts.push(field(reason.message))
+    }
+  }
+  parts.push('quests')
+  for (const fact of context.quests) {
+    pushTargetPlan(parts, fact)
+  }
+  parts.push('projects')
+  for (const fact of context.projects) {
+    pushTargetPlan(parts, fact)
+  }
+  parts.push('priorities')
+  for (const fact of context.raidPriorities) {
+    parts.push('priority')
+    parts.push(field(fact.provenance))
+    parts.push(field(fact.state))
+    parts.push(field(fact.value.rank))
+    parts.push(field(fact.value.itemId))
+    parts.push(field(fact.value.displayName))
+    parts.push(field(fact.value.missing))
+    for (const targetId of fact.value.sourceTargetIds) {
+      parts.push(field(targetId))
+    }
+  }
+  parts.push('catalog')
+  for (const entry of context.catalog) {
+    parts.push('catalog-entry')
+    parts.push(field(entry.itemId))
+    parts.push(field(entry.displayName))
+    parts.push(field(entry.category))
+  }
+  parts.push('incomplete')
+  for (const reference of context.incompleteReferences) {
+    parts.push(field(reference.targetType))
+    parts.push(field(reference.targetId))
+  }
+  parts.push('workshop')
+  parts.push(field(context.workshopPlanning))
+  return parts.join('|')
 }
 
 /**
@@ -238,7 +321,7 @@ export function buildVerifiedAiContext(input: {
     projects.push({ provenance: 'PLANNING', state: 'KNOWN', value: target })
   }
   const raidPriorities: VerifiedAiFact<RaidPriority>[] = []
-  for (const priority of planning.raidPriorities) {
+  for (const priority of planning.raidPriorities.slice(0, MAX_CONTEXT_PRIORITIES)) {
     raidPriorities.push({ provenance: 'PLANNING', state: 'KNOWN', value: priority })
   }
   const catalog: CatalogEntry[] = []
@@ -267,11 +350,13 @@ export function buildVerifiedAiContext(input: {
     }
   }
   const incompleteReferences: IncompleteReference[] = []
-  for (const reference of planning.incompleteReferences) {
+  for (const reference of planning.incompleteReferences.slice(
+    0,
+    MAX_CONTEXT_INCOMPLETE_REFERENCES
+  )) {
     incompleteReferences.push({ targetType: reference.targetType, targetId: reference.targetId })
   }
-  return {
-    version: buildContextVersion(playerState, gameKnowledge),
+  const payload: Omit<VerifiedAiContext, 'version'> = {
     snapshot: {
       capturedAt: playerState.snapshotMetadata.capturedAt,
       ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
@@ -286,6 +371,7 @@ export function buildVerifiedAiContext(input: {
     incompleteReferences,
     workshopPlanning: 'UNSUPPORTED',
   }
+  return { version: fingerprintVerifiedContext(payload), ...payload }
 }
 
 function findCatalogEntry(
@@ -613,7 +699,7 @@ export function answerFactualQuestion(
 // ---------------------------------------------------------------------------
 
 /**
- * Fixed system contract for any future approved generation session.
+ * Fixed system contract for an approved future generation session.
  * States the authority boundary the model must obey.
  */
 export const ARC_SYSTEM_CONTRACT = [
@@ -699,6 +785,13 @@ export interface ArcAiController {
   submit(question: string): Promise<ArcAiSnapshot>
   cancel(): Promise<ArcAiSnapshot>
   updateContext(context: VerifiedAiContext): Promise<ArcAiSnapshot>
+  /**
+   * Apply a Gaming Mode transition immediately, without waiting for
+   * in-flight work. ACTIVE or UNKNOWN detaches and cancels the active
+   * generation (best-effort) and moves to BLOCKED; INACTIVE relaxes
+   * IDLE or BLOCKED back to IDLE. Never resurrects settled work.
+   */
+  updateGamingMode(mode: GamingModeStatus): Promise<ArcAiSnapshot>
 }
 
 /** Fixed message shown when no production generation session exists. */
@@ -733,8 +826,9 @@ async function bestEffortCancel(session: TextGenerationSession): Promise<void> {
  * second submit while generating is a safe no-op. Every async
  * completion rechecks its generation token, the context version, and
  * Gaming Mode before appending anything, so stale work can never
- * surface. Deterministic factual intents answer directly without any
- * model; anything else requires an approved generation session.
+ * surface. Deterministic factual intents answer directly from verified
+ * context without model generation; anything else requires an approved
+ * generation session.
  */
 export function createArcAiController(deps: ArcAiControllerDeps): ArcAiController {
   let context = deps.context
@@ -871,5 +965,25 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
     return settleSafe()
   }
 
-  return { snapshot, submit, cancel, updateContext }
+  async function updateGamingMode(mode: GamingModeStatus): Promise<ArcAiSnapshot> {
+    gamingMode = mode
+    if (mode === 'INACTIVE') {
+      if (status === 'IDLE' || status === 'BLOCKED') {
+        status = 'IDLE'
+      }
+      return snapshot()
+    }
+    const session = activeSession
+    activeSession = undefined
+    if (session !== undefined) {
+      generationId += 1
+      await bestEffortCancel(session)
+    }
+    if (status === 'IDLE' || status === 'GENERATING' || status === 'BLOCKED') {
+      status = 'BLOCKED'
+    }
+    return snapshot()
+  }
+
+  return { snapshot, submit, cancel, updateContext, updateGamingMode }
 }

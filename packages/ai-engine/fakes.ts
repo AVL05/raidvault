@@ -287,6 +287,7 @@ export class FakeTextGenerationSession implements TextGenerationSession {
   public cancelCalls = 0
   public scriptedText = 'Fake model response.'
   public generateError: Error | undefined = undefined
+  public cancelError: Error | undefined = undefined
   public holdGeneration = false
   private gated: Array<() => void> = []
 
@@ -314,5 +315,8 @@ export class FakeTextGenerationSession implements TextGenerationSession {
 
   async cancel(): Promise<void> {
     this.cancelCalls += 1
+    if (this.cancelError !== undefined) {
+      throw this.cancelError
+    }
   }
 }

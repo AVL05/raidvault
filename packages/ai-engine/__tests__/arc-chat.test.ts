@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import type { PlayerState } from '@raidvault/domain'
 import { analyzeStash, buildPlanningSnapshot } from '@raidvault/rules-engine'
 import {
   MAX_CHAT_MESSAGES,
@@ -47,7 +48,7 @@ async function waitForGeneration(session: FakeTextGenerationSession): Promise<vo
 }
 
 describe('ARC chat — direct answers and sessions', () => {
-  it('answers factual questions without invoking any model', async () => {
+  it('answers factual questions without model calls', async () => {
     const session = new FakeTextGenerationSession()
     const { controller } = chatSetup({ session })
     const snapshot = await controller.submit('How many arc-wire do I own?')
@@ -271,14 +272,18 @@ describe('ARC chat — context staleness', () => {
     const { controller } = chatSetup({})
     const before = await controller.submit('How many arc-wire do I own?')
     expect(before.messages[before.messages.length - 1]?.content).toContain('You own 2')
-    const state = testState()
     const knowledge = testKnowledge()
-    const changed = {
-      ...state,
-      stash:
-        state.stash === undefined
-          ? undefined
-          : { ...state.stash, items: [{ id: 'arc-wire', quantity: 9 }] },
+    const changed: PlayerState = {
+      profile: { playerId: 'player-1' },
+      stash: {
+        id: 'stash-1',
+        items: [{ id: 'arc-wire', quantity: 9 }],
+        capacity: { totalSlots: 10, usedSlots: 1 },
+        freshness: { capturedAt: 1700000000000 },
+      },
+      questProgress: [{ questId: 'arc-quest', state: 'active', quantities: [] }],
+      projects: [{ projectId: 'arc-project', state: 'active', quantities: [] }],
+      snapshotMetadata: { capturedAt: 1700000000000 },
     }
     await controller.updateContext(
       buildVerifiedAiContext({
@@ -290,5 +295,109 @@ describe('ARC chat — context staleness', () => {
     )
     const after = await controller.submit('How many arc-wire do I own?')
     expect(after.messages[after.messages.length - 1]?.content).toContain('You own 9')
+  })
+})
+
+describe('ARC chat — gaming mode updates', () => {
+  async function waitForGeneration(session: FakeTextGenerationSession): Promise<void> {
+    while (session.generateCalls.length === 0) {
+      await Promise.resolve()
+    }
+  }
+
+  it('cancels a held generation immediately on ACTIVE', async () => {
+    const session = new FakeTextGenerationSession()
+    session.holdGeneration = true
+    const { controller } = chatSetup({ session })
+    const pending = controller.submit('Summarize my stash please.')
+    await waitForGeneration(session)
+    const updated = await controller.updateGamingMode('ACTIVE')
+    expect(updated.status).toBe('BLOCKED')
+    expect(session.cancelCalls).toBe(1)
+    session.releaseGeneration()
+    await pending
+    expect(controller.snapshot().messages.filter((m) => m.role === 'ASSISTANT')).toEqual([])
+    expect(controller.snapshot().status).toBe('BLOCKED')
+  })
+
+  it('cancels a held generation immediately on UNKNOWN', async () => {
+    const session = new FakeTextGenerationSession()
+    session.holdGeneration = true
+    const { controller } = chatSetup({ session })
+    const pending = controller.submit('Summarize my stash please.')
+    await waitForGeneration(session)
+    const updated = await controller.updateGamingMode('UNKNOWN')
+    expect(updated.status).toBe('BLOCKED')
+    expect(session.cancelCalls).toBe(1)
+    session.releaseGeneration()
+    await pending
+    expect(controller.snapshot().messages.filter((m) => m.role === 'ASSISTANT')).toEqual([])
+  })
+
+  it('stays fail-safe when cancel throws during an update', async () => {
+    const session = new FakeTextGenerationSession()
+    session.holdGeneration = true
+    session.cancelError = new Error('cancel exploded')
+    const { controller } = chatSetup({ session })
+    const pending = controller.submit('Summarize my stash please.')
+    await waitForGeneration(session)
+    const updated = await controller.updateGamingMode('ACTIVE')
+    expect(updated.status).toBe('BLOCKED')
+    session.cancelError = undefined
+    session.releaseGeneration()
+    await pending
+    expect(controller.snapshot().messages.filter((m) => m.role === 'ASSISTANT')).toEqual([])
+    expect(controller.snapshot().status).toBe('BLOCKED')
+  })
+
+  it('lets a newer generation proceed after an ACTIVE interruption', async () => {
+    const first = new FakeTextGenerationSession()
+    first.holdGeneration = true
+    first.scriptedText = 'stale answer'
+    const second = new FakeTextGenerationSession()
+    second.scriptedText = 'fresh answer'
+    const made: FakeTextGenerationSession[] = []
+    const controller = createArcAiController({
+      context: testContext(),
+      gamingModeSource: new ScriptedGamingModeSource('INACTIVE'),
+      sessionFactory: () => {
+        const next = made.length === 0 ? first : second
+        made.push(next)
+        return next
+      },
+    })
+    const pendingFirst = controller.submit('Summarize please A.')
+    while (first.generateCalls.length === 0) {
+      await Promise.resolve()
+    }
+    await controller.updateGamingMode('ACTIVE')
+    expect(first.cancelCalls).toBe(1)
+    await controller.updateGamingMode('INACTIVE')
+    expect(controller.snapshot().status).toBe('IDLE')
+    const pendingSecond = controller.submit('Summarize please B.')
+    first.releaseGeneration()
+    const settledFirst = await pendingFirst
+    const settledSecond = await pendingSecond
+    expect(first.cancelCalls).toBe(1)
+    expect(second.cancelCalls).toBe(0)
+    expect(settledFirst.messages.filter((m) => m.role === 'ASSISTANT')).toEqual([])
+    expect(
+      settledSecond.messages.filter((m) => m.role === 'ASSISTANT').map((m) => m.content)
+    ).toEqual(['fresh answer'])
+  })
+
+  it('does not double-cancel an already detached session', async () => {
+    const session = new FakeTextGenerationSession()
+    session.holdGeneration = true
+    const { controller } = chatSetup({ session })
+    const pending = controller.submit('Summarize my stash please.')
+    await waitForGeneration(session)
+    await controller.updateGamingMode('ACTIVE')
+    expect(session.cancelCalls).toBe(1)
+    await controller.updateGamingMode('ACTIVE')
+    expect(session.cancelCalls).toBe(1)
+    session.releaseGeneration()
+    await pending
+    expect(controller.snapshot().status).toBe('BLOCKED')
   })
 })
