@@ -3,9 +3,11 @@ import { renderToString } from 'react-dom/server'
 import type { PlayerState } from '@raidvault/domain'
 import type { GameKnowledge } from '@raidvault/game-data'
 import type { PlayerStateSnapshot } from '@raidvault/providers'
+import { analyzeStash } from '@raidvault/rules-engine'
 import { StashBrowser } from './stash-browser'
 import { StashDetail } from './stash-detail'
 import { UnavailablePanel } from './unavailable-panel'
+import { enrichRows } from './analysis-model'
 import {
   buildStashRows,
   describeSnapshot,
@@ -41,7 +43,7 @@ const state: PlayerState = {
 }
 
 function renderBrowser(snapshot: PlayerStateSnapshot): string {
-  const rows = buildStashRows(snapshot.state, knowledge)
+  const rows = enrichRows(buildStashRows(snapshot.state, knowledge), analyzeStash(snapshot.state, knowledge))
   return renderToString(
     <StashBrowser
       rows={rows}
@@ -61,8 +63,9 @@ describe('StashBrowser', () => {
     const html = renderBrowser(freshSnapshot())
     expect(html).toContain('Field Bandage')
     expect(html).toContain('demo-relic')
-    expect(html).toContain('Quantity:')
+    expect(html).toContain('QTY')
     expect(html).toContain('Slots:')
+    expect(html).toContain('REVIEW')
   })
 
   it('shows fresh status without stale text', () => {
@@ -104,7 +107,7 @@ describe('StashBrowser', () => {
 
 describe('StashDetail', () => {
   it('shows detail data for a known item', () => {
-    const rows = buildStashRows(state, knowledge)
+    const rows = enrichRows(buildStashRows(state, knowledge), analyzeStash(state, knowledge))
     const row = rows[0]
     if (row === undefined) throw new Error('expected row')
     const html = renderToString(<StashDetail row={row} />)
@@ -115,7 +118,7 @@ describe('StashDetail', () => {
   })
 
   it('falls back safely for unknown metadata', () => {
-    const rows = buildStashRows(state, knowledge)
+    const rows = enrichRows(buildStashRows(state, knowledge), analyzeStash(state, knowledge))
     const row = rows[1]
     if (row === undefined) throw new Error('expected row')
     const html = renderToString(<StashDetail row={row} />)
@@ -125,7 +128,16 @@ describe('StashDetail', () => {
 
   it('prompts when nothing is selected', () => {
     const html = renderToString(<StashDetail row={null} />)
-    expect(html).toContain('Select an item to see details.')
+    expect(html).toContain('Select an item to see deterministic facts.')
+  })
+
+  it('renders deterministic classification and reasons', () => {
+    const rows = enrichRows(buildStashRows(state, knowledge), analyzeStash(state, knowledge))
+    const row = rows[1]
+    if (row === undefined) throw new Error('expected row')
+    const html = renderToString(<StashDetail row={row} />)
+    expect(html).toContain('REVIEW')
+    expect(html).toContain('UNKNOWN_ITEM')
   })
 })
 
