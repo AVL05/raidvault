@@ -10,6 +10,7 @@ import { StashBrowser } from '../stash/stash-browser'
 import { ArcAiChat } from '../arc-ai/arc-ai-chat'
 import { PlanningSection } from '../stash/planning-section'
 import { UnavailablePanel } from '../stash/unavailable-panel'
+import { PrivacyStorage } from '../storage/privacy-storage'
 import {
   buildStashRows,
   describeSnapshot,
@@ -34,10 +35,11 @@ export default async function Home() {
   const snapshotResult = await cache.refresh()
   if (snapshotResult.success === false) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 p-8">
         <div className="mx-auto max-w-5xl">
           <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
-          <UnavailablePanel title="Stash unavailable" detail={snapshotResult.error.message} />
+          <UnavailablePanel title="Stash unavailable" detail="A validated player snapshot could not be obtained. Open the saved local workspace for previously validated data." />
+          <PrivacyStorage />
         </div>
       </main>
     )
@@ -48,10 +50,11 @@ export default async function Home() {
   )
   if (knowledgeResult.success === false) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 p-8">
         <div className="mx-auto max-w-5xl">
           <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
-          <UnavailablePanel title="Game data unavailable" detail={knowledgeResult.error.message} />
+          <UnavailablePanel title="Game data unavailable" detail="Validated game knowledge could not be loaded. No recommendations have been inferred." />
+          <PrivacyStorage />
         </div>
       </main>
     )
@@ -71,9 +74,10 @@ export default async function Home() {
   })
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="mx-auto max-w-5xl">
         <h1 className="mb-6 text-3xl font-bold text-gray-900">RaidVault Stash</h1>
+        <p className="mb-4 text-sm text-gray-700">Synthetic demo snapshot · no live account integration. Capture timestamps are preserved.</p>
         <StashBrowser
           rows={rows}
           categories={listCategories(rows)}
@@ -99,6 +103,7 @@ export default async function Home() {
           </p>
           <AiEnginePanel />
         </section>
+        <PrivacyStorage initialSnapshot={snapshot} />
       </div>
     </main>
   )

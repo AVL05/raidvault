@@ -38,3 +38,6 @@ cache/
 tmp/
 temp/
 *.tmp
+
+# Generated from each production build, never a source of truth
+apps/web/public/sw.js

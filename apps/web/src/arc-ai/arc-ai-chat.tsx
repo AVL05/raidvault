@@ -53,12 +53,12 @@ export function ArcAiChatView({
         </ul>
       )}
       {snapshot.status === 'BLOCKED' && (
-        <p className="mb-3 text-sm font-medium text-gray-900">
+        <p role="status" className="mb-3 text-sm font-medium text-gray-900">
           Local AI blocked while Gaming Mode is ACTIVE or UNKNOWN.
         </p>
       )}
       {snapshot.status === 'UNAVAILABLE' && (
-        <p className="mb-3 text-sm font-medium text-gray-900">
+        <p role="status" className="mb-3 text-sm font-medium text-gray-900">
           No production model is configured. Deterministic facts remain available through stash
           and planning views.
         </p>
@@ -73,7 +73,8 @@ export function ArcAiChatView({
           event.preventDefault()
           onSubmit()
         }}
-        className="flex gap-2"
+        aria-busy={generating}
+        className="flex flex-wrap gap-2"
       >
         <label htmlFor="arc-ai-input" className="sr-only">
           Ask ARC AI
@@ -103,7 +104,7 @@ export function ArcAiChatView({
           </button>
         )}
       </form>
-      {generating && <p className="mt-2 text-sm text-gray-600">Generating…</p>}
+      <p role="status" className="mt-2 text-sm text-gray-600">{generating ? 'Generating…' : ''}</p>
     </div>
   )
 }
@@ -126,9 +127,12 @@ export function ArcAiChat({ initialContext }: { readonly initialContext: Verifie
   const [draft, setDraft] = useState('')
 
   const submit = () => {
+    if (draft.trim() === '' || controller.snapshot().status === 'GENERATING') return
     const question = draft
     setDraft('')
-    void controller.submit(question).then((next) => setSnapshot(next))
+    const pending = controller.submit(question)
+    setSnapshot(controller.snapshot())
+    void pending.then((next) => setSnapshot(next))
   }
   const cancel = () => {
     void controller.cancel().then((next) => setSnapshot(next))

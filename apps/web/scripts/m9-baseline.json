@@ -1,0 +1,87 @@
+{
+  "commit": "f8e7d31e48a5640f6898aa97ca9461f0dd046d27",
+  "assets": [
+    {
+      "path": "/_next/static/chunks/09s9wc3dmi9rz.js",
+      "bytes": 21232,
+      "gzip": 5822,
+      "sha256": "f0f9153a8ca94e19e8d3170ae1e075b7c48becd6adf05e8acc8edeb82773d0ad"
+    },
+    {
+      "path": "/_next/static/chunks/0cz1d0mv5g_q7.js",
+      "bytes": 112594,
+      "gzip": 39520,
+      "sha256": "0973c1d64c88adc8e3c950410cb58b288f72118d5965b78049438deb8f2f9683"
+    },
+    {
+      "path": "/_next/static/chunks/0jnz4k3seqz7n.js",
+      "bytes": 183057,
+      "gzip": 48226,
+      "sha256": "27a342348972bf10e1a709c0e974b8abc482c2a91c2b4e525ebe65e2f07368cf"
+    },
+    {
+      "path": "/_next/static/chunks/0ztct2nlcu5yv.js",
+      "bytes": 16878,
+      "gzip": 5914,
+      "sha256": "203bcab5c4adba12eb03118677a4c8827fc916b77c94d43ba1572f9ce16a5fad"
+    },
+    {
+      "path": "/_next/static/chunks/1-b2s84pc0iqj.js",
+      "bytes": 14375,
+      "gzip": 3648,
+      "sha256": "92d1b8468208ee77bb96e221894531fc0904976e044b6296a8694a2f04316c62"
+    },
+    {
+      "path": "/_next/static/chunks/28x27f5zppvpc.js",
+      "bytes": 229144,
+      "gzip": 71454,
+      "sha256": "14ecc64862b0c8fb672d0242e27cfd0af20f09e947d2dc56b147c77dbe4ff9e1"
+    },
+    {
+      "path": "/_next/static/chunks/2q0a7kt5i1mr0.css",
+      "bytes": 187,
+      "gzip": 162,
+      "sha256": "3c91bb8a2c7754fd7af04647078ccc78641a393e37acec6b29bd0ed888fe9b30"
+    },
+    {
+      "path": "/_next/static/chunks/turbopack-2x8cabeihtedu.js",
+      "bytes": 9688,
+      "gzip": 3836,
+      "sha256": "7ff082f041ec0183b9405ec7c6d89c6ebf3fefd40a155a1ea2c10558d783a808"
+    }
+  ],
+  "jsBytes": 586968,
+  "jsGzip": 178420,
+  "cssBytes": 187,
+  "repeatedCleanBuildIdentical": true,
+  "dependencies": {
+    "apps/web/package.json": {
+      "@raidvault/domain": "workspace:*",
+      "@raidvault/game-data": "workspace:*",
+      "@raidvault/providers": "workspace:*",
+      "@raidvault/rules-engine": "workspace:*",
+      "@raidvault/ai-engine": "workspace:*",
+      "next": "16.3.6",
+      "react": "^19.2.0",
+      "react-dom": "^19.2.0"
+    },
+    "package.json": {
+      "typescript": "^5.6.0"
+    },
+    "packages/ai-engine/package.json": {
+      "@raidvault/domain": "workspace:*",
+      "@raidvault/game-data": "workspace:*",
+      "@raidvault/rules-engine": "workspace:*"
+    },
+    "packages/domain/package.json": {},
+    "packages/game-data/package.json": {},
+    "packages/providers/package.json": {
+      "@raidvault/domain": "workspace:*"
+    },
+    "packages/rules-engine/package.json": {
+      "@raidvault/domain": "workspace:*",
+      "@raidvault/game-data": "workspace:*"
+    },
+    "packages/shared/package.json": {}
+  }
+}
