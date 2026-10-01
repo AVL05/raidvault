@@ -19,6 +19,7 @@
 import type { PlayerState } from '@raidvault/domain'
 import type { GameKnowledge } from '@raidvault/game-data'
 import type {
+  MissingItemPlan,
   PlanningSnapshot,
   RaidPriority,
   RuleReason,
@@ -39,6 +40,9 @@ export const MAX_CONTEXT_TARGETS = 20
 
 /** Maximum catalog entries carried for search. */
 export const MAX_CATALOG_ENTRIES = 100
+
+/** Maximum missing-item entries carried in one context. */
+export const MAX_CONTEXT_MISSING_ITEMS = 20
 
 /** Maximum raid priorities carried in one context. */
 export const MAX_CONTEXT_PRIORITIES = 20
@@ -139,6 +143,7 @@ export interface VerifiedAiContext {
   readonly items: readonly VerifiedAiFact<AiItemFact>[]
   readonly quests: readonly VerifiedAiFact<TargetPlan>[]
   readonly projects: readonly VerifiedAiFact<TargetPlan>[]
+  readonly missingItems: readonly VerifiedAiFact<MissingItemPlan>[]
   readonly raidPriorities: readonly VerifiedAiFact<RaidPriority>[]
   readonly catalog: readonly CatalogEntry[]
   readonly incompleteReferences: readonly IncompleteReference[]
@@ -249,6 +254,21 @@ export function fingerprintVerifiedContext(
       parts.push(field(targetId))
     }
   }
+  parts.push('missing')
+  for (const fact of context.missingItems) {
+    parts.push('missing-item')
+    parts.push(field(fact.provenance))
+    parts.push(field(fact.state))
+    parts.push(field(fact.value.itemId))
+    parts.push(field(fact.value.displayName))
+    parts.push(field(fact.value.totalMissing))
+    for (const targetType of fact.value.sourceTypes) {
+      parts.push(field(targetType))
+    }
+    for (const targetId of fact.value.sourceTargetIds) {
+      parts.push(field(targetId))
+    }
+  }
   parts.push('catalog')
   for (const entry of context.catalog) {
     parts.push('catalog-entry')
@@ -324,6 +344,10 @@ export function buildVerifiedAiContext(input: {
   for (const priority of planning.raidPriorities.slice(0, MAX_CONTEXT_PRIORITIES)) {
     raidPriorities.push({ provenance: 'PLANNING', state: 'KNOWN', value: priority })
   }
+  const missingItems: VerifiedAiFact<MissingItemPlan>[] = []
+  for (const missing of planning.missingItems.slice(0, MAX_CONTEXT_MISSING_ITEMS)) {
+    missingItems.push({ provenance: 'PLANNING', state: 'KNOWN', value: missing })
+  }
   const catalog: CatalogEntry[] = []
   const catalogSeen = new Set<string>()
   const considerCatalog = (itemId: string): void => {
@@ -366,6 +390,7 @@ export function buildVerifiedAiContext(input: {
     items,
     quests,
     projects,
+    missingItems,
     raidPriorities,
     catalog,
     incompleteReferences,
@@ -513,38 +538,40 @@ function collapseWhitespace(question: string): string {
   return question.trim().replace(/\s+/g, ' ')
 }
 
+/**
+ * Conservative identity normalization: trim, lowercase, collapse
+ * whitespace, and treat hyphens as spaces so "arc wire" matches
+ * "arc-wire" deterministically. No substring or token guessing.
+ */
+function normalizeIdentity(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').replace(/-/g, ' ')
+}
+
+/**
+ * Resolve an item when the question contains its full normalized ID or
+ * its full normalized display name as a contiguous phrase. Partial
+ * token overlap never resolves: "wire cutters" must not identify
+ * "arc-wire". Zero or several distinct matches stay unresolved so the
+ * router answers unknown instead of guessing.
+ */
 function resolveItemId(question: string, context: VerifiedAiContext): string | undefined {
-  const lowered = question.toLowerCase()
-  for (const fact of context.items) {
-    if (lowered.includes(fact.value.itemId.toLowerCase())) {
-      return fact.value.itemId
+  const text = normalizeIdentity(question)
+  const matched: string[] = []
+  const consider = (phrase: string, itemId: string): void => {
+    if (phrase !== '' && text.includes(phrase) && !matched.includes(itemId)) {
+      matched.push(itemId)
     }
   }
   for (const fact of context.items) {
-    if (
-      fact.value.displayName !== undefined &&
-      lowered.includes(fact.value.displayName.toLowerCase())
-    ) {
-      return fact.value.itemId
-    }
+    consider(normalizeIdentity(fact.value.itemId), fact.value.itemId)
   }
-  const candidates: string[] = []
   for (const fact of context.items) {
-    const haystacks = [fact.value.itemId.toLowerCase()]
     if (fact.value.displayName !== undefined) {
-      haystacks.push(fact.value.displayName.toLowerCase())
-    }
-    const words = lowered.split(/[^a-z0-9]+/)
-    for (const word of words) {
-      if (word.length >= 3 && haystacks.some((haystack) => haystack.includes(word))) {
-        candidates.push(fact.value.itemId)
-        break
-      }
+      consider(normalizeIdentity(fact.value.displayName), fact.value.itemId)
     }
   }
-  const unique = [...new Set(candidates)]
-  if (unique.length === 1) {
-    const only = unique[0]
+  if (matched.length === 1) {
+    const only = matched[0]
     if (only !== undefined) {
       return only
     }
@@ -556,22 +583,37 @@ function resolveTargetId(
   question: string,
   context: VerifiedAiContext
 ): { targetType: 'QUEST' | 'PROJECT'; targetId: string } | undefined {
-  const lowered = question.toLowerCase()
+  const text = normalizeIdentity(question)
   const targets = [
     ...context.quests.map((fact) => ({ kind: 'QUEST' as const, plan: fact.value })),
     ...context.projects.map((fact) => ({ kind: 'PROJECT' as const, plan: fact.value })),
   ]
-  for (const target of targets) {
-    if (lowered.includes(target.plan.targetId.toLowerCase())) {
-      return { targetType: target.kind, targetId: target.plan.targetId }
+  const matched: Array<{ targetType: 'QUEST' | 'PROJECT'; targetId: string }> = []
+  const consider = (
+    phrase: string,
+    targetType: 'QUEST' | 'PROJECT',
+    targetId: string
+  ): void => {
+    if (
+      phrase !== '' &&
+      text.includes(phrase) &&
+      !matched.some((entry) => entry.targetType === targetType && entry.targetId === targetId)
+    ) {
+      matched.push({ targetType, targetId })
     }
   }
   for (const target of targets) {
-    if (
-      target.plan.targetName !== undefined &&
-      lowered.includes(target.plan.targetName.toLowerCase())
-    ) {
-      return { targetType: target.kind, targetId: target.plan.targetId }
+    consider(normalizeIdentity(target.plan.targetId), target.kind, target.plan.targetId)
+  }
+  for (const target of targets) {
+    if (target.plan.targetName !== undefined) {
+      consider(normalizeIdentity(target.plan.targetName), target.kind, target.plan.targetId)
+    }
+  }
+  if (matched.length === 1) {
+    const only = matched[0]
+    if (only !== undefined) {
+      return only
     }
   }
   return undefined
@@ -582,6 +624,18 @@ function findItemFact(
   itemId: string
 ): AiItemFact | undefined {
   for (const fact of context.items) {
+    if (fact.value.itemId === itemId) {
+      return fact.value
+    }
+  }
+  return undefined
+}
+
+function findPlannedMissing(
+  context: VerifiedAiContext,
+  itemId: string
+): MissingItemPlan | undefined {
+  for (const fact of context.missingItems) {
     if (fact.value.itemId === itemId) {
       return fact.value
     }
@@ -636,6 +690,9 @@ export function answerFactualQuestion(
   const wantsCompletion =
     lowered.includes('complete') || lowered.includes('finished') || lowered.includes('done')
   if (wantsPriority) {
+    if (!context.stash.value.hasStash || context.incompleteReferences.length > 0) {
+      return { text: UNKNOWN_FACT_MESSAGE }
+    }
     const top = context.raidPriorities[0]
     if (top === undefined) {
       return { text: 'No current raid priorities. All tracked requirements are satisfied.' }
@@ -683,10 +740,18 @@ export function answerFactualQuestion(
     return { text: `${label} is classified ${fact.classification}.` }
   }
   if (wantsMissing) {
+    const planned = findPlannedMissing(context, itemId)
+    if (planned !== undefined) {
+      const name = planned.displayName ?? label
+      if (planned.totalMissing === 0) {
+        return { text: `You are not missing any ${name}.` }
+      }
+      return { text: `You are missing ${planned.totalMissing} ${name}.` }
+    }
     if (fact.missing === 0) {
       return { text: `You are not missing any ${label}.` }
     }
-    return { text: `You are missing ${fact.missing} ${label}.` }
+    return { text: UNKNOWN_FACT_MESSAGE }
   }
   if (wantsOwned) {
     return { text: `You own ${fact.owned} ${label}.` }
@@ -862,8 +927,16 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
     }
   }
 
-  async function settleSafe(): Promise<ArcAiSnapshot> {
+  /** True when another action already superseded the given operation. */
+  function stale(operation: number): boolean {
+    return operation !== generationId
+  }
+
+  async function settleSafe(operation: number): Promise<ArcAiSnapshot> {
     gamingMode = await readControllerGamingMode(deps.gamingModeSource)
+    if (operation !== generationId) {
+      return snapshot()
+    }
     status = gamingMode === 'INACTIVE' ? 'IDLE' : 'BLOCKED'
     return snapshot()
   }
@@ -884,10 +957,11 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
     const generation = generationId
     status = 'GENERATING'
     error = undefined
-    gamingMode = await readControllerGamingMode(deps.gamingModeSource)
-    if (generation !== generationId) {
+    const mode = await readControllerGamingMode(deps.gamingModeSource)
+    if (stale(generation)) {
       return snapshot()
     }
+    gamingMode = mode
     if (gamingMode !== 'INACTIVE') {
       status = 'BLOCKED'
       return snapshot()
@@ -909,7 +983,18 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
       return snapshot()
     }
     const version = context.version
-    const session = factory()
+    let session: TextGenerationSession
+    try {
+      session = factory()
+    } catch {
+      if (stale(generation)) {
+        return snapshot()
+      }
+      activeSession = undefined
+      status = 'ERROR'
+      error = 'Local AI generation failed'
+      return snapshot()
+    }
     activeSession = session
     let result: AiGenerationResult
     try {
@@ -934,9 +1019,13 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
       return snapshot()
     }
     const bounded = text.length > MAX_OUTPUT_CHARS ? text.slice(0, MAX_OUTPUT_CHARS) : text
-    gamingMode = await readControllerGamingMode(deps.gamingModeSource)
-    if (generation !== generationId || version !== context.version || gamingMode !== 'INACTIVE') {
-      return settleSafe()
+    const freshMode = await readControllerGamingMode(deps.gamingModeSource)
+    if (stale(generation)) {
+      return snapshot()
+    }
+    gamingMode = freshMode
+    if (version !== context.version || gamingMode !== 'INACTIVE') {
+      return settleSafe(generation)
     }
     messages.push({ id: nextMessageId(), role: 'ASSISTANT', content: bounded })
     trimHistory()
@@ -946,23 +1035,25 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
 
   async function cancel(): Promise<ArcAiSnapshot> {
     generationId += 1
+    const operation = generationId
     const session = activeSession
     activeSession = undefined
     if (session !== undefined) {
       await bestEffortCancel(session)
     }
-    return settleSafe()
+    return settleSafe(operation)
   }
 
   async function updateContext(next: VerifiedAiContext): Promise<ArcAiSnapshot> {
     generationId += 1
+    const operation = generationId
     const session = activeSession
     activeSession = undefined
     if (session !== undefined) {
       await bestEffortCancel(session)
     }
     context = next
-    return settleSafe()
+    return settleSafe(operation)
   }
 
   async function updateGamingMode(mode: GamingModeStatus): Promise<ArcAiSnapshot> {
@@ -973,14 +1064,17 @@ export function createArcAiController(deps: ArcAiControllerDeps): ArcAiControlle
       }
       return snapshot()
     }
+    generationId += 1
+    const operation = generationId
     const session = activeSession
     activeSession = undefined
     if (session !== undefined) {
-      generationId += 1
       await bestEffortCancel(session)
     }
-    if (status === 'IDLE' || status === 'GENERATING' || status === 'BLOCKED') {
-      status = 'BLOCKED'
+    if (!stale(operation)) {
+      if (status === 'IDLE' || status === 'GENERATING' || status === 'BLOCKED') {
+        status = 'BLOCKED'
+      }
     }
     return snapshot()
   }

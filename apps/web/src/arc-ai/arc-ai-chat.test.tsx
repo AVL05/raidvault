@@ -135,6 +135,7 @@ describe('ArcAiChat controller wiring', () => {
     items: [],
     quests: [],
     projects: [],
+    missingItems: [],
     raidPriorities: [],
     catalog: [],
     incompleteReferences: [],

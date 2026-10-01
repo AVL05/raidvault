@@ -9,9 +9,11 @@ import {
   createArcAiController,
   type ArcAiController,
   type GamingModeSource,
+  type GamingModeStatus,
 } from '../index'
 import {
   FakeTextGenerationSession,
+  HeldGamingModeSource,
   ScriptedGamingModeSource,
 } from '../fakes'
 import { testContext, testKnowledge, testState } from './helpers'
@@ -118,6 +120,34 @@ describe('ARC chat — direct answers and sessions', () => {
     expect(snapshot.error).toContain(`${MAX_MESSAGE_CHARS}`)
   })
 
+  it('answers M6 missing facts without invoking any model', async () => {
+    const session = new FakeTextGenerationSession()
+    const state = testState()
+    const unowned: PlayerState = {
+      ...state,
+      stash:
+        state.stash === undefined
+          ? undefined
+          : { ...state.stash, items: [{ id: 'arc-cell', quantity: 3 }] },
+    }
+    const knowledge = testKnowledge()
+    const controller = createArcAiController({
+      context: buildVerifiedAiContext({
+        playerState: unowned,
+        gameKnowledge: knowledge,
+        analysis: analyzeStash(unowned, knowledge),
+        planning: buildPlanningSnapshot(unowned, knowledge),
+      }),
+      gamingModeSource: new ScriptedGamingModeSource('INACTIVE'),
+      sessionFactory: () => session,
+    })
+    const snapshot = await controller.submit('How many arc-wire am I missing?')
+    expect(snapshot.status).toBe('IDLE')
+    expect(session.generateCalls).toHaveLength(0)
+    const last = snapshot.messages[snapshot.messages.length - 1]
+    expect(last?.content).toBe('You are missing 5 Arc Wire.')
+  })
+
   it('turns generation failure into a fixed sanitized error', async () => {
     const session = new FakeTextGenerationSession()
     session.generateError = new Error('C:\\gpu\\driver secret-token-xyz')
@@ -134,6 +164,20 @@ describe('ARC chat — direct answers and sessions', () => {
     const snapshot = await controller.submit('Summarize my stash please.')
     expect(snapshot.status).toBe('ERROR')
     expect(snapshot.error).toBe('Local AI generation failed')
+  })
+
+  it('resolves a throwing session factory to a sanitized error', async () => {
+    const controller = createArcAiController({
+      context: testContext(),
+      gamingModeSource: new ScriptedGamingModeSource('INACTIVE'),
+      sessionFactory: () => {
+        throw new Error('C:\\secret\\driver token-123')
+      },
+    })
+    const snapshot = await controller.submit('Summarize my stash please.')
+    expect(snapshot.status).toBe('ERROR')
+    expect(snapshot.error).toBe('Local AI generation failed')
+    expect(snapshot.status).not.toBe('GENERATING')
   })
 })
 
@@ -399,5 +443,77 @@ describe('ARC chat — gaming mode updates', () => {
     session.releaseGeneration()
     await pending
     expect(controller.snapshot().status).toBe('BLOCKED')
+  })
+
+  it('invalidates a submit held at its initial status read', async () => {
+    const session = new FakeTextGenerationSession()
+    const source = new HeldGamingModeSource()
+    const controller = createArcAiController({
+      context: testContext(),
+      gamingModeSource: source,
+      sessionFactory: () => session,
+    })
+    const pending = controller.submit('Summarize my stash please.')
+    const updated = await controller.updateGamingMode('ACTIVE')
+    expect(updated.status).toBe('BLOCKED')
+    source.releaseAll('INACTIVE')
+    const settled = await pending
+    expect(settled.status).toBe('BLOCKED')
+    expect(settled.gamingMode).toBe('ACTIVE')
+    expect(session.generateCalls).toHaveLength(0)
+    expect(settled.messages.filter((m) => m.role === 'ASSISTANT')).toEqual([])
+  })
+
+  it('invalidates UNKNOWN the same way during the initial read', async () => {
+    const session = new FakeTextGenerationSession()
+    const source = new HeldGamingModeSource()
+    const controller = createArcAiController({
+      context: testContext(),
+      gamingModeSource: source,
+      sessionFactory: () => session,
+    })
+    const pending = controller.submit('Summarize my stash please.')
+    const updated = await controller.updateGamingMode('UNKNOWN')
+    expect(updated.status).toBe('BLOCKED')
+    source.releaseAll('INACTIVE')
+    const settled = await pending
+    expect(settled.status).toBe('BLOCKED')
+    expect(session.generateCalls).toHaveLength(0)
+  })
+
+  it('discards answers when the final status read goes stale', async () => {
+    const session = new FakeTextGenerationSession()
+    session.holdGeneration = true
+    let reads = 0
+    const finalReads: Array<(status: GamingModeStatus) => void> = []
+    const source: GamingModeSource = {
+      getGamingMode: () => {
+        reads += 1
+        if (reads === 1) {
+          return Promise.resolve('INACTIVE')
+        }
+        return new Promise<GamingModeStatus>((resolve) => {
+          finalReads.push(resolve)
+        })
+      },
+    }
+    const { controller } = chatSetup({ gamingSource: source, session })
+    const pending = controller.submit('Summarize my stash please.')
+    while (session.generateCalls.length === 0) {
+      await Promise.resolve()
+    }
+    session.releaseGeneration()
+    while (finalReads.length === 0) {
+      await Promise.resolve()
+    }
+    const updated = await controller.updateGamingMode('ACTIVE')
+    expect(updated.status).toBe('BLOCKED')
+    const release = finalReads.shift()
+    if (release === undefined) throw new Error('expected held final read')
+    release('INACTIVE')
+    const settled = await pending
+    expect(settled.status).toBe('BLOCKED')
+    expect(settled.gamingMode).toBe('ACTIVE')
+    expect(settled.messages.filter((message) => message.role === 'ASSISTANT')).toEqual([])
   })
 })

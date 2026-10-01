@@ -199,6 +199,26 @@ export class ThrowingGamingModeSource implements GamingModeSource {
   }
 }
 
+/** Manually released gaming-mode source for read-race tests. */
+export class HeldGamingModeSource implements GamingModeSource {
+  private gated: Array<(status: GamingModeStatus) => void> = []
+
+  async getGamingMode(): Promise<GamingModeStatus> {
+    return new Promise<GamingModeStatus>((resolve) => {
+      this.gated.push(resolve)
+    })
+  }
+
+  /** Resolve every held read in order with the given status. */
+  releaseAll(status: GamingModeStatus): void {
+    const pending = this.gated
+    this.gated = []
+    for (const resolve of pending) {
+      resolve(status)
+    }
+  }
+}
+
 /** Capability environment with no GPU surface present. */
 export function gpuEnvAbsent(): GpuCapabilityEnvironment {
   return {}
