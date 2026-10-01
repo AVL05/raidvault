@@ -157,6 +157,32 @@ describe('ARC router — planning missing facts', () => {
     const answer = answerFactualQuestion('How many arc-wire am I missing?', unownedContext())
     expect(answer?.text).toBe('You are missing 5 Arc Wire.')
   })
+
+  it('resolves an unowned missing item by exact display name', () => {
+    expect(answerFactualQuestion('How many Arc Wire am I missing?', unownedContext())?.text)
+      .toBe('You are missing 5 Arc Wire.')
+  })
+
+  it.each(['wire cutters', 'wire', 'arc-wires'])('does not guess missing identity from %s', (name) => {
+    expect(answerFactualQuestion(`How many ${name} am I missing?`, unownedContext())?.text)
+      .toBe(UNKNOWN_FACT_MESSAGE)
+  })
+
+  it.each(['How many arc-wire do I own?', 'Should I keep arc-wire?', 'Why should I keep arc-wire?'])(
+    'keeps M5 authority for %s', (question) => {
+      const context = unownedContext()
+      expect(context.items.map((fact) => fact.value.itemId)).toEqual(['arc-cell'])
+      expect(answerFactualQuestion(question, context)?.text).toBe(UNKNOWN_FACT_MESSAGE)
+    }
+  )
+
+  it('uses M5 only for verified zero missing when no M6 plan matches', () => {
+    expect(answerFactualQuestion('How many arc-cell am I missing?', unownedContext())?.text)
+      .toBe('You are not missing any Arc Cell.')
+    const context = testContext()
+    expect(answerFactualQuestion('How many arc-wire am I missing?', { ...context, missingItems: [] })?.text)
+      .toBe(UNKNOWN_FACT_MESSAGE)
+  })
 })
 
 describe('ARC router — conservative identity', () => {
@@ -198,6 +224,21 @@ describe('ARC router — conservative identity', () => {
     }
     const answer = answerFactualQuestion('How many Arc Wire do I own?', customContext(testState(), doubled))
     expect(answer?.text).toBe(UNKNOWN_FACT_MESSAGE)
+  })
+
+  it.each([
+    ['How many arc-wire do I own?', 'You own 2 Arc Wire.'],
+    ['Should I keep Arc Wire?', UNKNOWN_FACT_MESSAGE],
+    ['Why should I keep Arc Wire?', UNKNOWN_FACT_MESSAGE],
+    ['How many arc-wires do I own?', UNKNOWN_FACT_MESSAGE],
+  ])('respects catalog ambiguity and exact IDs for %s', (question, expected) => {
+    const knowledge = testKnowledge()
+    const context = customContext(testState(), {
+      ...knowledge,
+      items: [...knowledge.items, { id: 'arc-wire-spool', name: 'Arc Wire' }],
+    })
+    expect(context.items.some((fact) => fact.value.itemId === 'arc-wire-spool')).toBe(false)
+    expect(answerFactualQuestion(question, context)?.text).toBe(expected)
   })
 })
 

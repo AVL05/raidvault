@@ -54,6 +54,7 @@ describe('ARC context — builder', () => {
       value: {
         itemId: 'arc-wire',
         displayName: 'Arc Wire',
+        displayNameUnique: true,
         owned: 2,
         required: 5,
         reserved: 2,
@@ -80,6 +81,7 @@ describe('ARC context — builder', () => {
       analysis.items.map((row) => ({
         itemId: row.itemId,
         displayName: row.itemId === 'arc-wire' ? 'Arc Wire' : 'Arc Cell',
+        displayNameUnique: true,
         owned: row.owned,
         required: row.required,
         reserved: row.reserved,
@@ -89,6 +91,28 @@ describe('ARC context — builder', () => {
         reasons: row.reasons,
       }))
     )
+  })
+
+  it('fingerprints bounded display-name uniqueness without exposing the duplicate catalog item', () => {
+    const state = testState()
+    const knowledge = testKnowledge()
+    const base = contextFor(state, knowledge)
+    const doubled = contextFor(state, {
+      ...knowledge,
+      items: [...knowledge.items, { id: 'arc-wire-spool', name: '  ARC   WIRE  ' }],
+    })
+    expect(base.items[0]?.value.displayNameUnique).toBe(true)
+    expect(doubled.items[0]?.value.displayNameUnique).toBe(false)
+    expect(doubled.items.map(({ value: { displayNameUnique, ...facts } }) => facts))
+      .toEqual(base.items.map(({ value: { displayNameUnique, ...facts } }) => facts))
+    expect(doubled.catalog).toEqual(base.catalog)
+    expect(doubled.version).not.toBe(base.version)
+  })
+
+  it('marks absent display names as non-unique', () => {
+    const context = contextFor(testState(), { ...testKnowledge(), items: [] })
+    expect(context.items.every((fact) => fact.value.displayName === undefined && !fact.value.displayNameUnique))
+      .toBe(true)
   })
 
   it('preserves unknown progression references explicitly', () => {

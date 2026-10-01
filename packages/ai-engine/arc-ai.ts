@@ -105,6 +105,7 @@ export interface StashSummaryFact {
 export interface AiItemFact {
   readonly itemId: string
   readonly displayName: string | undefined
+  readonly displayNameUnique: boolean
   readonly owned: number
   readonly required: number
   readonly reserved: number
@@ -222,6 +223,7 @@ export function fingerprintVerifiedContext(
     parts.push(field(fact.state))
     parts.push(field(fact.value.itemId))
     parts.push(field(fact.value.displayName))
+    parts.push(field(fact.value.displayNameUnique))
     parts.push(field(fact.value.owned))
     parts.push(field(fact.value.required))
     parts.push(field(fact.value.reserved))
@@ -312,12 +314,16 @@ export function buildVerifiedAiContext(input: {
         }
   const items: VerifiedAiFact<AiItemFact>[] = []
   for (const row of analysis.items.slice(0, MAX_CONTEXT_ITEMS)) {
+    const displayName = displayNameOf(gameKnowledge, row.itemId)
     items.push({
       provenance: 'RULES_ENGINE',
       state: 'KNOWN',
       value: {
         itemId: row.itemId,
-        displayName: displayNameOf(gameKnowledge, row.itemId),
+        displayName,
+        displayNameUnique: displayName !== undefined && gameKnowledge.items.filter(
+          (item) => normalizeIdentity(item.name) === normalizeIdentity(displayName)
+        ).length === 1,
         owned: row.owned,
         required: row.required,
         reserved: row.reserved,
@@ -555,18 +561,22 @@ function normalizeIdentity(value: string): string {
  * router answers unknown instead of guessing.
  */
 function resolveItemId(question: string, context: VerifiedAiContext): string | undefined {
-  const text = normalizeIdentity(question)
+  const idText = ` ${collapseWhitespace(question).toLowerCase().replace(/[?!.,]/g, ' ')} `
+  const text = ` ${normalizeIdentity(question).replace(/[?!.,]/g, ' ')} `
   const matched: string[] = []
   const consider = (phrase: string, itemId: string): void => {
-    if (phrase !== '' && text.includes(phrase) && !matched.includes(itemId)) {
+    if (phrase !== '' && text.includes(` ${phrase} `) && !matched.includes(itemId)) {
       matched.push(itemId)
     }
   }
   for (const fact of context.items) {
-    consider(normalizeIdentity(fact.value.itemId), fact.value.itemId)
+    if (idText.includes(` ${collapseWhitespace(fact.value.itemId).toLowerCase()} `)) {
+      matched.push(fact.value.itemId)
+    }
   }
+  if (matched.length > 0) return matched.length === 1 ? matched[0] : undefined
   for (const fact of context.items) {
-    if (fact.value.displayName !== undefined) {
+    if (fact.value.displayName !== undefined && fact.value.displayNameUnique) {
       consider(normalizeIdentity(fact.value.displayName), fact.value.itemId)
     }
   }
@@ -577,6 +587,22 @@ function resolveItemId(question: string, context: VerifiedAiContext): string | u
     }
   }
   return undefined
+}
+
+/** Resolve missing quantities only from bounded M6 plans, without partial identities. */
+function resolveMissingItemId(question: string, context: VerifiedAiContext): string | undefined {
+  const text = ` ${normalizeIdentity(question).replace(/[?!.,]/g, ' ')} `
+  const matched = new Set<string>()
+  for (const fact of context.missingItems) {
+    const { itemId, displayName } = fact.value
+    for (const identity of [itemId, displayName]) {
+      if (identity !== undefined && normalizeIdentity(identity) !== '' &&
+          text.includes(` ${normalizeIdentity(identity)} `)) {
+        matched.add(itemId)
+      }
+    }
+  }
+  return matched.size === 1 ? [...matched][0] : undefined
 }
 
 function resolveTargetId(
@@ -720,6 +746,27 @@ export function answerFactualQuestion(
     }
     return { text: UNKNOWN_FACT_MESSAGE }
   }
+  if (wantsMissing && !wantsExplanation && !wantsClassification) {
+    const missingItemId = resolveMissingItemId(text, context)
+    if (missingItemId !== undefined) {
+      const planned = findPlannedMissing(context, missingItemId)
+      if (planned !== undefined) {
+        const name = planned.displayName ?? missingItemId
+        return {
+          text: planned.totalMissing === 0
+            ? `You are not missing any ${name}.`
+            : `You are missing ${planned.totalMissing} ${name}.`,
+        }
+      }
+    }
+    const ownedItemId = resolveItemId(text, context)
+    const ownedFact = ownedItemId === undefined ? undefined : findItemFact(context, ownedItemId)
+    return {
+      text: ownedFact?.missing === 0 && ownedItemId !== undefined
+        ? `You are not missing any ${displayLabel(context, ownedItemId)}.`
+        : UNKNOWN_FACT_MESSAGE,
+    }
+  }
   const itemId = resolveItemId(text, context)
   if (itemId === undefined) {
     if (wantsOwned || wantsMissing || wantsClassification || wantsExplanation) {
@@ -738,20 +785,6 @@ export function answerFactualQuestion(
   }
   if (wantsClassification) {
     return { text: `${label} is classified ${fact.classification}.` }
-  }
-  if (wantsMissing) {
-    const planned = findPlannedMissing(context, itemId)
-    if (planned !== undefined) {
-      const name = planned.displayName ?? label
-      if (planned.totalMissing === 0) {
-        return { text: `You are not missing any ${name}.` }
-      }
-      return { text: `You are missing ${planned.totalMissing} ${name}.` }
-    }
-    if (fact.missing === 0) {
-      return { text: `You are not missing any ${label}.` }
-    }
-    return { text: UNKNOWN_FACT_MESSAGE }
   }
   if (wantsOwned) {
     return { text: `You own ${fact.owned} ${label}.` }
