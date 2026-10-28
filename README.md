@@ -6,6 +6,10 @@ authoritative; optional AI must use verified facts and stay read-only.
 > RaidVault is an unofficial community project and is not affiliated with,
 > endorsed by, or sponsored by Embark Studios.
 
+## Returning to RaidVault later?
+
+Start with [the dated resumption handoff](./docs/RESUME_HERE.md), then review [M11 real game-data tracking](https://github.com/AVL05/raidvault/issues/29) and [release gates](./docs/RELEASE.md). This repository has no production player-data integration or approved AI model; verify the current build and hosted deployment independently.
+
 ## Status
 
 **RaidVault v0.1.0 — Public Preview (Pre-alpha) preparation.**
